@@ -347,12 +347,29 @@ export default function Dashboard() {
                     </div>
                     {device.zones.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-200">
-                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Zones ({device.zones.length})</div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {device.zones.map((zone) => (
-                            <ZoneCard key={zone.id} zone={zone} />
-                          ))}
-                        </div>
+                        {(() => {
+                          // Filter to only enabled zones and sort by name
+                          const enabledZones = device.zones
+                            .filter(zone => zone.enabled)
+                            .sort((a, b) => a.name.localeCompare(b.name));
+                          
+                          return enabledZones.length > 0 ? (
+                            <>
+                              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">
+                                Active Zones ({enabledZones.length} of {device.zones.length})
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {enabledZones.map((zone) => (
+                                  <ZoneCard key={zone.id} zone={zone} />
+                                ))}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-slate-500 italic">
+                              No active zones ({device.zones.length} disabled)
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
