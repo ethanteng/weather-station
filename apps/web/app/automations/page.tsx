@@ -645,23 +645,6 @@ function RuleView({
                   </>
                 )}
               </span>
-              {isRachioSchedule && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="ml-auto inline-flex items-center px-3 py-1 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-all"
-                  aria-expanded={isExpanded}
-                >
-                  <span className="mr-2">Details</span>
-                  <svg
-                    className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              )}
             </div>
           </div>
 
@@ -1042,7 +1025,28 @@ function RuleView({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          {isRachioSchedule && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                isExpanded
+                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+              }`}
+              aria-expanded={isExpanded}
+            >
+              <svg
+                className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              Details
+            </button>
+          )}
           <button
             onClick={() => onToggle(rule.id, !rule.enabled, rule.source)}
             className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
