@@ -118,19 +118,19 @@ export default function Dashboard() {
           <div className="stat">
             <div className="stat-label">Last Hour</div>
             <div className="stat-value">
-              {latestWeather?.rain1h !== null ? `${latestWeather.rain1h.toFixed(2)}"` : 'N/A'}
+              {latestWeather && latestWeather.rain1h !== null ? `${latestWeather.rain1h.toFixed(2)}"` : 'N/A'}
             </div>
           </div>
           <div className="stat" style={{ marginTop: '15px' }}>
             <div className="stat-label">Last 24 Hours</div>
             <div className="stat-value">
-              {latestWeather?.rain24h !== null ? `${latestWeather.rain24h.toFixed(2)}"` : 'N/A'}
+              {latestWeather && latestWeather.rain24h !== null ? `${latestWeather.rain24h.toFixed(2)}"` : 'N/A'}
             </div>
           </div>
           <div className="stat" style={{ marginTop: '15px' }}>
             <div className="stat-label">Last 7 Days</div>
             <div className="stat-value">
-              {weather7d?.totalRainfall !== null ? `${weather7d.totalRainfall.toFixed(2)}"` : 'N/A'}
+              {weather7d && weather7d.totalRainfall !== null ? `${weather7d.totalRainfall.toFixed(2)}"` : 'N/A'}
             </div>
           </div>
           {weather24h && weather24h.readings.length > 0 && (
@@ -144,7 +144,7 @@ export default function Dashboard() {
           <div className="stat">
             <div className="stat-label">Current</div>
             <div className="stat-value">
-              {latestWeather?.soilMoisture !== null ? `${latestWeather.soilMoisture.toFixed(1)}%` : 'N/A'}
+              {latestWeather && latestWeather.soilMoisture !== null ? `${latestWeather.soilMoisture.toFixed(1)}%` : 'N/A'}
             </div>
           </div>
           {weather24h && weather24h.readings.length > 0 && (

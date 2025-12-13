@@ -10,6 +10,10 @@ coverage/
 dist/
 build/
 
+# Next.js
+.next/
+out/
+
 # Misc
 .DS_Store
 *.pem

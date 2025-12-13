@@ -33,7 +33,7 @@ export function startServer(): void {
   const app = createServer();
   const port = process.env.PORT || 3001;
 
-  const server = app.listen(port, () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
   });
 
