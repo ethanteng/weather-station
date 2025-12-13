@@ -56,7 +56,7 @@ export class OpenMeteoClient {
         throw new Error(`Open-Meteo API returned ${response.status}: ${response.statusText}`);
       }
 
-      const data: OpenMeteoResponse = await response.json();
+      const data = (await response.json()) as OpenMeteoResponse;
 
       // Validate response structure
       if (!data.daily || !data.daily.time || data.daily.time.length === 0) {
