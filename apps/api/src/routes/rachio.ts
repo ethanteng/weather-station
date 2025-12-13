@@ -25,6 +25,16 @@ router.get('/devices', async (_req: Request, res: Response) => {
         // Try multiple possible field names for image URL
         const imageUrl = rawPayload?.imageUrl || rawPayload?.image_url || rawPayload?.image || rawPayload?.imageUrlFull || null;
         
+        // Helper to extract name from object or return string
+        const extractValue = (value: any): string | null => {
+          if (!value) return null;
+          if (typeof value === 'string') return value;
+          if (typeof value === 'object' && value !== null) {
+            return value.name || value.label || JSON.stringify(value);
+          }
+          return String(value);
+        };
+
         return {
           id: zone.id,
           name: zone.name,
@@ -36,11 +46,11 @@ router.get('/devices', async (_req: Request, res: Response) => {
           availableWater: rawPayload?.availableWater || rawPayload?.availableWaterIn || null,
           maxRuntime: rawPayload?.maxRuntime || rawPayload?.maxRuntimeSeconds ? Math.round(rawPayload.maxRuntimeSeconds / 60) : null,
           runtime: rawPayload?.runtime || rawPayload?.runtimeSeconds ? Math.round(rawPayload.runtimeSeconds / 60) : null,
-          customNozzle: rawPayload?.customNozzle || rawPayload?.nozzle || null,
-          customShade: rawPayload?.customShade || rawPayload?.shade || null,
-          customSlope: rawPayload?.customSlope || rawPayload?.slope || null,
-          customCrop: rawPayload?.customCrop || rawPayload?.crop || null,
-          customSoil: rawPayload?.customSoil || rawPayload?.soil || null,
+          customNozzle: extractValue(rawPayload?.customNozzle || rawPayload?.nozzle),
+          customShade: extractValue(rawPayload?.customShade || rawPayload?.shade),
+          customSlope: extractValue(rawPayload?.customSlope || rawPayload?.slope),
+          customCrop: extractValue(rawPayload?.customCrop || rawPayload?.crop),
+          customSoil: extractValue(rawPayload?.customSoil || rawPayload?.soil),
           rawPayload: zone.rawPayload,
         };
       }),
