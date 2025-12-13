@@ -42,12 +42,24 @@ export default function AutomationsPage() {
     }
   };
 
-  const handleToggle = async (id: string, enabled: boolean) => {
+  const handleToggle = async (id: string, enabled: boolean, source?: 'custom' | 'rachio') => {
     try {
-      if (enabled) {
-        await automationApi.enableRule(id);
+      // Check if this is a Rachio schedule
+      if (source === 'rachio') {
+        // Extract the actual Rachio schedule ID (remove 'rachio_' prefix)
+        const rachioScheduleId = id.replace(/^rachio_/, '');
+        if (enabled) {
+          await rachioApi.enableSchedule(rachioScheduleId);
+        } else {
+          await rachioApi.disableSchedule(rachioScheduleId);
+        }
       } else {
-        await automationApi.disableRule(id);
+        // Custom rule
+        if (enabled) {
+          await automationApi.enableRule(id);
+        } else {
+          await automationApi.disableRule(id);
+        }
       }
       await fetchRules();
     } catch (err) {
@@ -55,7 +67,13 @@ export default function AutomationsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, source?: 'custom' | 'rachio') => {
+    // Prevent deletion of Rachio schedules
+    if (source === 'rachio') {
+      alert('Rachio schedules can only be deleted through the Rachio app.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this rule?')) return;
 
     try {
@@ -178,7 +196,12 @@ export default function AutomationsPage() {
               ) : (
                 <RuleView
                   rule={rule}
-                  onEdit={() => setEditingId(rule.id)}
+                  onEdit={() => {
+                    // Only allow editing custom rules
+                    if (rule.source !== 'rachio') {
+                      setEditingId(rule.id);
+                    }
+                  }}
                   onToggle={handleToggle}
                   onDelete={handleDelete}
                 />
@@ -221,13 +244,55 @@ function RuleView({
 }: {
   rule: AutomationRule;
   onEdit: () => void;
-  onToggle: (id: string, enabled: boolean) => void;
-  onDelete: (id: string) => void;
+  onToggle: (id: string, enabled: boolean, source?: 'custom' | 'rachio') => void;
+  onDelete: (id: string, source?: 'custom' | 'rachio') => void;
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
+  const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ name: string; duration: number; deviceName: string }>; totalDuration: number } | null>(null);
+  const isRachioSchedule = rule.source === 'rachio';
 
   useEffect(() => {
     const loadActionDisplay = async () => {
+      // Handle Rachio schedules differently
+      if (isRachioSchedule && rule.scheduleZones) {
+        try {
+          // Fetch zone names with device names
+          const devices = await rachioApi.getDevices();
+          const zoneDeviceMap = new Map<string, string>(); // zoneId -> deviceName
+          const zoneNameMap = new Map<string, string>(); // zoneId -> zoneName
+          const allZones: RachioZone[] = [];
+          
+          // Build device and zone maps
+          for (const device of devices) {
+            if (device.zones) {
+              allZones.push(...device.zones);
+              device.zones.forEach(zone => {
+                zoneDeviceMap.set(zone.id, device.name);
+                zoneNameMap.set(zone.id, zone.name);
+              });
+            }
+          }
+          
+          // Format schedule zones with names and durations
+          const formattedZones = rule.scheduleZones.map(sz => ({
+            name: zoneNameMap.get(sz.zoneId) || `Zone ${sz.zoneId.substring(0, 8)}`,
+            duration: Math.round(sz.duration / 60), // Convert seconds to minutes
+            deviceName: zoneDeviceMap.get(sz.zoneId) || rule.deviceName || 'Unknown Device',
+          }));
+
+          const totalDuration = rule.scheduleZones.reduce((sum, sz) => sum + sz.duration, 0);
+          
+          setRachioScheduleDisplay({
+            zones: formattedZones,
+            totalDuration: Math.round(totalDuration / 60),
+          });
+        } catch (error) {
+          console.error('Error loading Rachio schedule display:', error);
+        }
+        return;
+      }
+
+      // Handle custom rules
       if (rule.actions.type === 'set_rain_delay') {
         setActionDisplay({
           icon: '⏸️',
@@ -285,7 +350,7 @@ function RuleView({
     };
 
     loadActionDisplay();
-  }, [rule.actions]);
+  }, [rule.actions, rule.source, rule.scheduleZones, rule.deviceName, isRachioSchedule]);
 
   const formatConditions = () => {
     const conditions: Array<{ label: string; value: string; icon: string }> = [];
@@ -331,11 +396,16 @@ function RuleView({
   const action = actionDisplay || { icon: '❓', label: 'Loading...', value: '' };
 
   return (
-    <div className="p-6">
+    <div className={`p-6 ${isRachioSchedule ? 'bg-gradient-to-r from-indigo-50/50 to-purple-50/50 border-l-4 border-indigo-400' : ''}`}>
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
             <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
+            {isRachioSchedule && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                📅 Rachio Schedule
+              </span>
+            )}
             <span
               className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                 rule.enabled
@@ -355,51 +425,87 @@ function RuleView({
                 </>
               )}
             </span>
-          </div>
-
-          {/* Conditions */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Conditions</span>
-            </div>
-            {conditions.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {conditions.map((cond, idx) => (
-                  <div
-                    key={idx}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-sm"
-                  >
-                    <span>{cond.icon}</span>
-                    <span className="font-medium text-slate-700">{cond.label}:</span>
-                    <span className="font-semibold text-blue-700">{cond.value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 italic">No conditions set</p>
+            {isRachioSchedule && rule.deviceName && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                🏠 {rule.deviceName}
+              </span>
             )}
           </div>
 
-          {/* Actions */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Action</span>
+          {/* Rachio Schedule Display */}
+          {isRachioSchedule && rachioScheduleDisplay && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Schedule Zones</span>
+              </div>
+              <div className="space-y-2">
+                {rachioScheduleDisplay.zones.map((zone, idx) => (
+                  <div key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg text-sm mr-2 mb-2">
+                    <span className="text-lg">🚿</span>
+                    <span className="font-medium text-slate-700">{zone.deviceName} - {zone.name}:</span>
+                    <span className="font-semibold text-purple-700">{zone.duration} min</span>
+                  </div>
+                ))}
+                {rachioScheduleDisplay.zones.length > 1 && (
+                  <div className="mt-2 text-sm text-slate-600">
+                    <span className="font-medium">Total Duration: </span>
+                    <span className="font-semibold">{rachioScheduleDisplay.totalDuration} minutes</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
-              <span className="text-lg">{action.icon}</span>
-              <span className="font-medium text-slate-700">{action.label}:</span>
-              <span className="font-semibold text-purple-700">{action.value}</span>
-            </div>
-          </div>
+          )}
 
-          {/* Last Run */}
-          {rule.lastRunAt && (
+          {/* Conditions (only for custom rules) */}
+          {!isRachioSchedule && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Conditions</span>
+              </div>
+              {conditions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {conditions.map((cond, idx) => (
+                    <div
+                      key={idx}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-sm"
+                    >
+                      <span>{cond.icon}</span>
+                      <span className="font-medium text-slate-700">{cond.label}:</span>
+                      <span className="font-semibold text-blue-700">{cond.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 italic">No conditions set</p>
+              )}
+            </div>
+          )}
+
+          {/* Actions (only for custom rules) */}
+          {!isRachioSchedule && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Action</span>
+              </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
+                <span className="text-lg">{action.icon}</span>
+                <span className="font-medium text-slate-700">{action.label}:</span>
+                <span className="font-semibold text-purple-700">{action.value}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Last Run (only for custom rules) */}
+          {!isRachioSchedule && rule.lastRunAt && (
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -412,7 +518,7 @@ function RuleView({
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={() => onToggle(rule.id, !rule.enabled)}
+            onClick={() => onToggle(rule.id, !rule.enabled, rule.source)}
             className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
               rule.enabled
                 ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
@@ -435,24 +541,28 @@ function RuleView({
               </>
             )}
           </button>
-          <button
-            onClick={onEdit}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all duration-200"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(rule.id)}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-all duration-200"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            Delete
-          </button>
+          {!isRachioSchedule && (
+            <>
+              <button
+                onClick={onEdit}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit
+              </button>
+              <button
+                onClick={() => onDelete(rule.id, rule.source)}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

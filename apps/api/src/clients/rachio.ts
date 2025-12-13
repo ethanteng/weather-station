@@ -32,6 +32,23 @@ export interface RachioRainDelay {
   [key: string]: unknown;
 }
 
+export interface RachioScheduleZone {
+  zoneId: string;
+  duration: number;
+  sortOrder: number;
+}
+
+export interface RachioSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  zones: RachioScheduleZone[];
+  startDate?: number;
+  totalDuration?: number;
+  deviceId: string;
+  [key: string]: unknown;
+}
+
 export class RachioClient {
   private client: AxiosInstance;
 
@@ -158,6 +175,58 @@ export class RachioClient {
     } catch (error) {
       console.error(`Error fetching device status for ${deviceId}:`, error);
       throw new Error(`Failed to fetch device status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get schedules for a specific device
+   * @param deviceId Device ID
+   */
+  async getSchedules(deviceId: string): Promise<RachioSchedule[]> {
+    try {
+      const response = await this.client.get(`/device/${deviceId}`);
+      const scheduleRules = response.data?.scheduleRules || [];
+      
+      return scheduleRules.map((schedule: any) => ({
+        id: schedule.id,
+        name: schedule.name || 'Unnamed Schedule',
+        enabled: schedule.enabled !== false,
+        zones: schedule.zones || [],
+        startDate: schedule.startDate,
+        totalDuration: schedule.totalDuration,
+        deviceId: deviceId,
+      }));
+    } catch (error) {
+      console.error(`Error fetching schedules for device ${deviceId}:`, error);
+      throw new Error(`Failed to fetch schedules: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Enable a schedule
+   * @param scheduleId Schedule ID
+   */
+  async enableSchedule(scheduleId: string): Promise<void> {
+    try {
+      await this.client.put(`/scheduleRule/${scheduleId}/enable`);
+      console.log(`Enabled schedule ${scheduleId}`);
+    } catch (error) {
+      console.error(`Error enabling schedule ${scheduleId}:`, error);
+      throw new Error(`Failed to enable schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Disable a schedule
+   * @param scheduleId Schedule ID
+   */
+  async disableSchedule(scheduleId: string): Promise<void> {
+    try {
+      await this.client.put(`/scheduleRule/${scheduleId}/disable`);
+      console.log(`Disabled schedule ${scheduleId}`);
+    } catch (error) {
+      console.error(`Error disabling schedule ${scheduleId}:`, error);
+      throw new Error(`Failed to disable schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

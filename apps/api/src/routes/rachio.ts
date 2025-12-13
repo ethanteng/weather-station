@@ -264,5 +264,117 @@ router.get('/watering-events', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/rachio/schedules
+ * Get schedules for device(s)
+ * Query params: deviceId (optional - if not provided, fetch for all devices)
+ */
+router.get('/schedules', async (req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.RACHIO_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    const deviceId = req.query.deviceId as string | undefined;
+
+    if (deviceId) {
+      // Fetch schedules for specific device
+      const schedules = await client.getSchedules(deviceId);
+      return res.json(schedules);
+    } else {
+      // Fetch schedules for all devices
+      const devices = await prisma.rachioDevice.findMany();
+      const allSchedules = [];
+
+      for (const device of devices) {
+        try {
+          const schedules = await client.getSchedules(device.id);
+          allSchedules.push(...schedules);
+        } catch (error) {
+          console.error(`Error fetching schedules for device ${device.id}:`, error);
+          // Continue with other devices even if one fails
+        }
+      }
+
+      return res.json(allSchedules);
+    }
+  } catch (error) {
+    console.error('Error fetching schedules:', error);
+    return res.status(500).json({ error: 'Failed to fetch schedules' });
+  }
+});
+
+/**
+ * PUT /api/rachio/schedules/:id/enable
+ * Enable a Rachio schedule
+ */
+router.put('/schedules/:id/enable', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const apiKey = process.env.RACHIO_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    await client.enableSchedule(id);
+
+    // Log to audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'enable_rachio_schedule',
+        details: {
+          scheduleId: id,
+          source: 'api',
+        },
+        source: 'api',
+      },
+    });
+
+    return res.json({ success: true, message: 'Schedule enabled' });
+  } catch (error) {
+    console.error('Error enabling schedule:', error);
+    return res.status(500).json({ error: 'Failed to enable schedule' });
+  }
+});
+
+/**
+ * PUT /api/rachio/schedules/:id/disable
+ * Disable a Rachio schedule
+ */
+router.put('/schedules/:id/disable', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const apiKey = process.env.RACHIO_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    await client.disableSchedule(id);
+
+    // Log to audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'disable_rachio_schedule',
+        details: {
+          scheduleId: id,
+          source: 'api',
+        },
+        source: 'api',
+      },
+    });
+
+    return res.json({ success: true, message: 'Schedule disabled' });
+  } catch (error) {
+    console.error('Error disabling schedule:', error);
+    return res.status(500).json({ error: 'Failed to disable schedule' });
+  }
+});
+
 export default router;
 

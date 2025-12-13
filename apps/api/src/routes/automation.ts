@@ -1,23 +1,80 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { evaluateRules } from '../automation/engine';
+import { RachioClient } from '../clients/rachio';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 /**
  * GET /api/automations
- * Get list of all automation rules
+ * Get list of all automation rules (custom + Rachio schedules)
  */
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const rules = await prisma.automationRule.findMany({
+    // Fetch custom automation rules from database
+    const customRules = await prisma.automationRule.findMany({
       orderBy: {
         createdAt: 'asc',
       },
     });
 
-    return res.json(rules);
+    // Fetch Rachio schedules for all devices
+    const rachioSchedules: any[] = [];
+    const apiKey = process.env.RACHIO_API_KEY;
+    
+    if (apiKey) {
+      try {
+        const client = new RachioClient(apiKey);
+        const devices = await prisma.rachioDevice.findMany();
+
+        for (const device of devices) {
+          try {
+            const schedules = await client.getSchedules(device.id);
+            // Transform Rachio schedules to match AutomationRule format
+            const transformedSchedules = schedules.map(schedule => ({
+              id: `rachio_${schedule.id}`,
+              name: schedule.name,
+              enabled: schedule.enabled,
+              conditions: {}, // Rachio schedules don't have conditions
+              actions: {
+                type: 'run_zone' as const,
+                zoneIds: schedule.zones.map(z => z.zoneId),
+                minutes: schedule.totalDuration ? Math.round(schedule.totalDuration / 60) : undefined,
+              },
+              lastRunAt: null,
+              lastResult: null,
+              createdAt: schedule.startDate ? new Date(schedule.startDate).toISOString() : new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              source: 'rachio' as const,
+              deviceId: schedule.deviceId,
+              deviceName: device.name,
+              scheduleZones: schedule.zones, // Keep original zone data with durations
+            }));
+            rachioSchedules.push(...transformedSchedules);
+          } catch (error) {
+            console.error(`Error fetching schedules for device ${device.id}:`, error);
+            // Continue with other devices even if one fails
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Rachio schedules:', error);
+        // Continue without Rachio schedules if API fails
+      }
+    }
+
+    // Mark custom rules with source
+    const customRulesWithSource = customRules.map(rule => ({
+      ...rule,
+      source: 'custom' as const,
+    }));
+
+    // Combine and sort by name
+    const allRules = [...customRulesWithSource, ...rachioSchedules].sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+
+    return res.json(allRules);
   } catch (error) {
     console.error('Error fetching automations:', error);
     return res.status(500).json({ error: 'Failed to fetch automations' });

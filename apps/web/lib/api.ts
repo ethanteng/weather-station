@@ -124,6 +124,22 @@ export interface WateringEvent {
   source: 'manual' | 'schedule' | 'automation';
 }
 
+export interface RachioScheduleZone {
+  zoneId: string;
+  duration: number;
+  sortOrder: number;
+}
+
+export interface RachioSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  zones: RachioScheduleZone[];
+  startDate?: number;
+  totalDuration?: number;
+  deviceId: string;
+}
+
 export interface AutomationRule {
   id: string;
   name: string;
@@ -145,6 +161,10 @@ export interface AutomationRule {
   lastResult?: string | null;
   createdAt: string;
   updatedAt: string;
+  source?: 'custom' | 'rachio'; // Indicates if this is a custom rule or Rachio schedule
+  deviceId?: string; // For Rachio schedules
+  deviceName?: string; // For Rachio schedules
+  scheduleZones?: RachioScheduleZone[]; // Original zone data with durations for Rachio schedules
 }
 
 export interface DailyForecast {
@@ -189,6 +209,21 @@ export const rachioApi = {
       params: { deviceId },
     });
     return response.data;
+  },
+
+  async getSchedules(deviceId?: string): Promise<RachioSchedule[]> {
+    const response = await api.get<RachioSchedule[]>('/api/rachio/schedules', {
+      params: deviceId ? { deviceId } : {},
+    });
+    return response.data;
+  },
+
+  async enableSchedule(id: string): Promise<void> {
+    await api.put(`/api/rachio/schedules/${id}/enable`);
+  },
+
+  async disableSchedule(id: string): Promise<void> {
+    await api.put(`/api/rachio/schedules/${id}/disable`);
   },
 };
 
