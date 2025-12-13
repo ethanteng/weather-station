@@ -28,10 +28,21 @@ export async function pollWeatherData(): Promise<void> {
     // For Phase 1, use the first device
     // TODO: Support multiple devices if needed
     const device = devices[0];
-    console.log(`Fetching data for device: ${device.id} (${device.name})`);
+    
+    // Extract MAC address from device object
+    // Ecowitt API may return MAC in various formats: mac, macAddress, mac_address, device_mac
+    const macAddress = 
+      (device as any).mac || 
+      (device as any).macAddress || 
+      (device as any).mac_address || 
+      (device as any).device_mac || 
+      device.id; // Fallback to id if no MAC field found
+    
+    console.log(`Fetching data for device: ${device.id} (${device.name}), MAC: ${macAddress}`);
+    console.log('Full device object:', JSON.stringify(device, null, 2));
 
-    // Get device data
-    const deviceData = await client.getDeviceData(device.id);
+    // Get device data using MAC address
+    const deviceData = await client.getDeviceData(macAddress);
 
     // Parse weather data
     const parsed = client.parseWeatherData(deviceData.sensors || {});

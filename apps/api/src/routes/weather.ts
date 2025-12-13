@@ -119,5 +119,43 @@ router.get('/summary', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/weather/discover
+ * Discovery endpoint to debug Ecowitt API structure
+ */
+router.get('/discover', async (_req: Request, res: Response) => {
+  try {
+    const applicationKey = process.env.ECOWITT_APPLICATION_KEY;
+    const apiKey = process.env.ECOWITT_API_KEY;
+
+    if (!applicationKey || !apiKey) {
+      return res.status(500).json({ error: 'Ecowitt credentials not configured' });
+    }
+
+    const { EcowittClient } = await import('../clients/ecowitt');
+    const client = new EcowittClient(applicationKey, apiKey);
+
+    // Try to get device list
+    try {
+      const devices = await client.getDeviceList();
+      return res.json({
+        success: true,
+        deviceCount: devices.length,
+        devices: devices,
+        message: 'Check server logs for full API responses',
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: 'Failed to fetch devices',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Check server logs for full error details',
+      });
+    }
+  } catch (error) {
+    console.error('Error in discover endpoint:', error);
+    return res.status(500).json({ error: 'Discovery failed' });
+  }
+});
+
 export default router;
 

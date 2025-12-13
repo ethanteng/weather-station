@@ -46,6 +46,16 @@ export class EcowittClient {
   }
 
   /**
+   * Normalize MAC address format for Ecowitt API
+   * Removes colons and converts to uppercase
+   * Example: "AA:BB:CC:DD:EE:FF" -> "AABBCCDDEEFF"
+   */
+  private normalizeMacAddress(mac: string): string {
+    // Remove colons and spaces, convert to uppercase
+    return mac.replace(/[:-\s]/g, '').toUpperCase();
+  }
+
+  /**
    * Get list of devices
    */
   async getDeviceList(): Promise<EcowittDevice[]> {
@@ -73,11 +83,14 @@ export class EcowittClient {
    */
   async getDeviceData(deviceId: string): Promise<EcowittDeviceData> {
     try {
+      // Normalize MAC address format
+      const normalizedMac = this.normalizeMacAddress(deviceId);
+      
       const response = await this.client.get('/device/data', {
         params: {
           application_key: this.applicationKey,
           api_key: this.apiKey,
-          mac: deviceId,
+          mac: normalizedMac,
         },
       });
 
