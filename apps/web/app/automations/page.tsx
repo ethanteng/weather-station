@@ -710,34 +710,73 @@ function RuleEditor({
                     No enabled zones found. Make sure zones are enabled in your Rachio device.
                   </div>
                 ) : (
-                  <div className="border border-slate-300 rounded-lg bg-white max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {zones.map((zone) => {
                       const isSelected = (actions.zoneIds || []).includes(zone.id);
                       const deviceName = zoneDeviceMap.get(zone.id) || 'Unknown Device';
                       return (
-                        <label
+                        <div
                           key={zone.id}
-                          className={`flex items-center px-4 py-3 border-b border-slate-200 last:border-b-0 cursor-pointer hover:bg-blue-50 transition-colors ${
-                            isSelected ? 'bg-blue-50' : ''
+                          onClick={() => handleZoneToggle(zone.id)}
+                          className={`relative bg-white rounded-lg border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+                            isSelected
+                              ? 'border-blue-500 shadow-md ring-2 ring-blue-200'
+                              : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleZoneToggle(zone.id)}
-                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 focus:ring-2"
-                          />
-                          <div className="ml-3 flex-1">
-                            <div className="text-sm font-medium text-slate-700">{zone.name}</div>
-                            <div className="text-xs text-slate-500">{deviceName}</div>
+                          {/* Selection Indicator */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 z-10">
+                              <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Zone Image */}
+                          {zone.imageUrl ? (
+                            <div className="aspect-square bg-slate-100 overflow-hidden">
+                              <img
+                                src={zone.imageUrl}
+                                alt={zone.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                              <span className="text-4xl">🚿</span>
+                            </div>
+                          )}
+                          
+                          {/* Zone Info */}
+                          <div className="p-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {zone.zoneNumber && (
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                                  {zone.zoneNumber}
+                                </span>
+                              )}
+                              <span className="text-xs font-semibold text-slate-900 truncate flex-1">{zone.name}</span>
+                            </div>
+                            <div className="text-xs text-slate-500 truncate">{deviceName}</div>
                           </div>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
                 )}
                 {(actions.zoneIds || []).length === 0 && !loadingZones && zones.length > 0 && (
                   <p className="text-xs text-amber-600 mt-2">Please select at least one zone</p>
+                )}
+                {(actions.zoneIds || []).length > 0 && (
+                  <p className="text-xs text-slate-600 mt-2">
+                    {(actions.zoneIds || []).length} zone{(actions.zoneIds || []).length !== 1 ? 's' : ''} selected
+                  </p>
                 )}
               </div>
               <div>
