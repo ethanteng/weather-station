@@ -1,0 +1,15 @@
+[Unit]
+Description=Weather Station Startup Service
+After=docker.service network.target
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=ethan
+WorkingDirectory=/home/ethan/weather-station
+ExecStart=/home/ethan/weather-station/startup.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
