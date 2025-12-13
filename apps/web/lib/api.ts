@@ -88,7 +88,22 @@ export interface AutomationRule {
   id: string;
   name: string;
   enabled: boolean;
-  description: string;
+  conditions: {
+    rain24h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    soilMoisture?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    rain1h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    temperature?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    humidity?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+  };
+  actions: {
+    type: 'set_rain_delay' | 'run_zone';
+    hours?: number;
+    minutes?: number;
+  };
+  lastRunAt?: string | null;
+  lastResult?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const weatherApi = {
@@ -122,6 +137,35 @@ export const rachioApi = {
 export const automationApi = {
   async getRules(): Promise<AutomationRule[]> {
     const response = await api.get<AutomationRule[]>('/api/automations');
+    return response.data;
+  },
+
+  async getRule(id: string): Promise<AutomationRule> {
+    const response = await api.get<AutomationRule>(`/api/automations/${id}`);
+    return response.data;
+  },
+
+  async createRule(rule: Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'lastResult'>): Promise<AutomationRule> {
+    const response = await api.post<AutomationRule>('/api/automations', rule);
+    return response.data;
+  },
+
+  async updateRule(id: string, rule: Partial<AutomationRule>): Promise<AutomationRule> {
+    const response = await api.put<AutomationRule>(`/api/automations/${id}`, rule);
+    return response.data;
+  },
+
+  async deleteRule(id: string): Promise<void> {
+    await api.delete(`/api/automations/${id}`);
+  },
+
+  async enableRule(id: string): Promise<AutomationRule> {
+    const response = await api.post<AutomationRule>(`/api/automations/${id}/enable`);
+    return response.data;
+  },
+
+  async disableRule(id: string): Promise<AutomationRule> {
+    const response = await api.post<AutomationRule>(`/api/automations/${id}/disable`);
     return response.data;
   },
 

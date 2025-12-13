@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { weatherApi, rachioApi, automationApi, wateringApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
@@ -160,15 +161,21 @@ export default function Dashboard() {
 
       {/* Automation Rules */}
       <div className="card">
-        <h2>Automation Rules</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h2>Automation Rules</h2>
+          <Link
+            href="/automations"
+            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            style={{ textDecoration: 'none' }}
+          >
+            Manage Rules
+          </Link>
+        </div>
         {automations.length > 0 ? (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {automations.map((rule) => (
               <li key={rule.id} style={{ padding: '10px', borderBottom: '1px solid #eee' }}>
                 <strong>{rule.name}</strong> - {rule.enabled ? '✓ Enabled' : '✗ Disabled'}
-                <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '5px' }}>
-                  {rule.description}
-                </div>
               </li>
             ))}
           </ul>

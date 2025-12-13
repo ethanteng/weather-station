@@ -1,26 +1,224 @@
 import { PrismaClient } from '@prisma/client';
 import { RachioClient } from '../clients/rachio';
-import {
-  RAIN_DELAY_THRESHOLD_INCHES,
-  RAIN_DELAY_DURATION_HOURS,
-  SOIL_MOISTURE_HIGH_THRESHOLD_PERCENT,
-  SOIL_MOISTURE_LOW_THRESHOLD_PERCENT,
-  DRY_WATERING_DURATION_MINUTES,
-  DRY_RAIN_THRESHOLD_INCHES,
-} from './constants';
 import { findLawnZone } from './zoneFinder';
 
 const prisma = new PrismaClient();
 
 interface AutomationResult {
-  rule: string;
+  ruleId: string;
+  ruleName: string;
   triggered: boolean;
   action?: string;
   details?: Record<string, unknown>;
 }
 
+interface Condition {
+  operator: '>=' | '<=' | '>' | '<' | '==';
+  value: number;
+}
+
+interface Conditions {
+  rain24h?: Condition;
+  soilMoisture?: Condition;
+  rain1h?: Condition;
+  temperature?: Condition;
+  humidity?: Condition;
+}
+
+interface Actions {
+  type: 'set_rain_delay' | 'run_zone';
+  hours?: number;
+  minutes?: number;
+}
+
 /**
- * Evaluate all automation rules
+ * Evaluate a single condition against weather data
+ */
+function evaluateCondition(
+  field: keyof Conditions,
+  condition: Condition,
+  weather: {
+    rain24h: number | null;
+    soilMoisture: number | null;
+    rain1h: number | null;
+    temperature: number | null;
+    humidity: number | null;
+  }
+): boolean {
+  const value = weather[field];
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  switch (condition.operator) {
+    case '>=':
+      return value >= condition.value;
+    case '<=':
+      return value <= condition.value;
+    case '>':
+      return value > condition.value;
+    case '<':
+      return value < condition.value;
+    case '==':
+      return value === condition.value;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Evaluate all conditions for a rule
+ */
+function evaluateConditions(
+  conditions: Conditions,
+  weather: {
+    rain24h: number | null;
+    soilMoisture: number | null;
+    rain1h: number | null;
+    temperature: number | null;
+    humidity: number | null;
+  }
+): boolean {
+  // All conditions must be true (AND logic)
+  for (const [field, condition] of Object.entries(conditions)) {
+    if (!evaluateCondition(field as keyof Conditions, condition as Condition, weather)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Execute an action based on the rule's actions configuration
+ */
+async function executeAction(
+  actions: Actions,
+  devices: { id: string }[],
+  rachioClient: RachioClient,
+  weather: {
+    rain24h: number | null;
+    soilMoisture: number | null;
+  }
+): Promise<AutomationResult | null> {
+  if (actions.type === 'set_rain_delay') {
+    if (!actions.hours) {
+      console.error('set_rain_delay action missing hours');
+      return null;
+    }
+
+    for (const device of devices) {
+      try {
+        await rachioClient.setRainDelay(device.id, actions.hours);
+
+        await prisma.auditLog.create({
+          data: {
+            action: 'set_rain_delay',
+            details: {
+              deviceId: device.id,
+              hours: actions.hours,
+            },
+            source: 'automation',
+          },
+        });
+      } catch (error) {
+        console.error(`Error setting rain delay on device ${device.id}:`, error);
+      }
+    }
+
+    return {
+      ruleId: '',
+      ruleName: '',
+      triggered: true,
+      action: `set_rain_delay_${actions.hours}h`,
+      details: {
+        hours: actions.hours,
+        deviceCount: devices.length,
+      },
+    };
+  }
+
+  if (actions.type === 'run_zone') {
+    if (!actions.minutes) {
+      console.error('run_zone action missing minutes');
+      return null;
+    }
+
+    const lawnZoneId = await findLawnZone();
+    if (!lawnZoneId) {
+      console.log('No lawn zone found, skipping run_zone action');
+      return null;
+    }
+
+    // Safety check: Don't water if we've watered this zone in the last 24 hours
+    const lastWatering = await prisma.wateringEvent.findFirst({
+      where: {
+        zoneId: lawnZoneId,
+        timestamp: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (lastWatering) {
+      console.log(`Skipping watering: zone ${lawnZoneId} was watered recently`);
+      return null;
+    }
+
+    try {
+      const durationSec = actions.minutes * 60;
+      await rachioClient.runZone(lawnZoneId, durationSec);
+
+      await prisma.wateringEvent.create({
+        data: {
+          zoneId: lawnZoneId,
+          durationSec,
+          source: 'automation',
+          rawPayload: {
+            soilMoisture: weather.soilMoisture,
+            rain24h: weather.rain24h,
+          },
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          action: 'run_zone',
+          details: {
+            zoneId: lawnZoneId,
+            durationSec,
+            soilMoisture: weather.soilMoisture,
+            rain24h: weather.rain24h,
+          },
+          source: 'automation',
+        },
+      });
+
+      return {
+        ruleId: '',
+        ruleName: '',
+        triggered: true,
+        action: `run_zone_${actions.minutes}min`,
+        details: {
+          zoneId: lawnZoneId,
+          durationSec,
+          soilMoisture: weather.soilMoisture,
+          rain24h: weather.rain24h,
+        },
+      };
+    } catch (error) {
+      console.error(`Error running zone ${lawnZoneId}:`, error);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Evaluate all automation rules from database
  * Runs every 5 minutes via cron job
  */
 export async function evaluateRules(): Promise<void> {
@@ -52,159 +250,59 @@ export async function evaluateRules(): Promise<void> {
       return;
     }
 
+    // Get all enabled automation rules
+    const rules = await prisma.automationRule.findMany({
+      where: {
+        enabled: true,
+      },
+    });
+
+    if (rules.length === 0) {
+      console.log('No enabled automation rules found');
+      return;
+    }
+
     const results: AutomationResult[] = [];
 
-    // Rule 1: Rainy Day Pause
-    // If rain_24h >= 0.5" → set rain delay 48h
-    if (latestWeather.rain24h !== null && latestWeather.rain24h >= RAIN_DELAY_THRESHOLD_INCHES) {
-      for (const device of devices) {
-        try {
-          await rachioClient.setRainDelay(device.id, RAIN_DELAY_DURATION_HOURS);
-          
-          results.push({
-            rule: 'rainy_day_pause',
-            triggered: true,
-            action: `set_rain_delay_${RAIN_DELAY_DURATION_HOURS}h`,
-            details: {
-              deviceId: device.id,
-              rain24h: latestWeather.rain24h,
-              threshold: RAIN_DELAY_THRESHOLD_INCHES,
-            },
-          });
+    // Prepare weather data for condition evaluation
+    const weather = {
+      rain24h: latestWeather.rain24h,
+      soilMoisture: latestWeather.soilMoisture,
+      rain1h: latestWeather.rain1h,
+      temperature: latestWeather.temperature,
+      humidity: latestWeather.humidity,
+    };
 
-          // Log to audit log
-          await prisma.auditLog.create({
-            data: {
-              action: 'set_rain_delay',
-              details: {
-                deviceId: device.id,
-                hours: RAIN_DELAY_DURATION_HOURS,
-                reason: 'rainy_day_pause',
-                rain24h: latestWeather.rain24h,
-              },
-              source: 'automation',
-            },
-          });
-        } catch (error) {
-          console.error(`Error setting rain delay on device ${device.id}:`, error);
-        }
-      }
-    }
+    // Evaluate each rule
+    for (const rule of rules) {
+      try {
+        const conditions = rule.conditions as Conditions;
+        const actions = rule.actions as Actions;
 
-    // Rule 2: Too Wet - Skip
-    // If soil_moisture >= 40% → set rain delay 24h
-    if (
-      latestWeather.soilMoisture !== null &&
-      latestWeather.soilMoisture >= SOIL_MOISTURE_HIGH_THRESHOLD_PERCENT
-    ) {
-      for (const device of devices) {
-        try {
-          await rachioClient.setRainDelay(device.id, 24); // 24 hours
+        // Check if conditions are met
+        if (evaluateConditions(conditions, weather)) {
+          // Execute the action
+          const result = await executeAction(actions, devices, rachioClient, weather);
 
-          results.push({
-            rule: 'too_wet_skip',
-            triggered: true,
-            action: 'set_rain_delay_24h',
-            details: {
-              deviceId: device.id,
-              soilMoisture: latestWeather.soilMoisture,
-              threshold: SOIL_MOISTURE_HIGH_THRESHOLD_PERCENT,
-            },
-          });
-
-          await prisma.auditLog.create({
-            data: {
-              action: 'set_rain_delay',
-              details: {
-                deviceId: device.id,
-                hours: 24,
-                reason: 'too_wet_skip',
-                soilMoisture: latestWeather.soilMoisture,
-              },
-              source: 'automation',
-            },
-          });
-        } catch (error) {
-          console.error(`Error setting rain delay on device ${device.id}:`, error);
-        }
-      }
-    }
-
-    // Rule 3: Too Dry - Boost
-    // If soil_moisture <= 20% AND rain_24h < 0.1" → run lawn zone 10 min
-    if (
-      latestWeather.soilMoisture !== null &&
-      latestWeather.soilMoisture <= SOIL_MOISTURE_LOW_THRESHOLD_PERCENT &&
-      latestWeather.rain24h !== null &&
-      latestWeather.rain24h < DRY_RAIN_THRESHOLD_INCHES
-    ) {
-      const lawnZoneId = await findLawnZone();
-
-      if (lawnZoneId) {
-        // Safety check: Don't water if we've watered this zone in the last 24 hours
-        const lastWatering = await prisma.wateringEvent.findFirst({
-          where: {
-            zoneId: lawnZoneId,
-            timestamp: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-            },
-          },
-          orderBy: {
-            timestamp: 'desc',
-          },
-        });
-
-        if (!lastWatering) {
-          try {
-            const durationSec = DRY_WATERING_DURATION_MINUTES * 60;
-            await rachioClient.runZone(lawnZoneId, durationSec);
-
+          if (result) {
             results.push({
-              rule: 'too_dry_boost',
-              triggered: true,
-              action: `run_zone_${DRY_WATERING_DURATION_MINUTES}min`,
-              details: {
-                zoneId: lawnZoneId,
-                soilMoisture: latestWeather.soilMoisture,
-                rain24h: latestWeather.rain24h,
-              },
+              ruleId: rule.id,
+              ruleName: rule.name,
+              ...result,
             });
 
-            // Store watering event
-            await prisma.wateringEvent.create({
+            // Update rule's last run info
+            await prisma.automationRule.update({
+              where: { id: rule.id },
               data: {
-                zoneId: lawnZoneId,
-                durationSec,
-                source: 'automation',
-                rawPayload: {
-                  rule: 'too_dry_boost',
-                  soilMoisture: latestWeather.soilMoisture,
-                  rain24h: latestWeather.rain24h,
-                },
+                lastRunAt: new Date(),
+                lastResult: JSON.stringify(result),
               },
             });
-
-            await prisma.auditLog.create({
-              data: {
-                action: 'run_zone',
-                details: {
-                  zoneId: lawnZoneId,
-                  durationSec,
-                  reason: 'too_dry_boost',
-                  soilMoisture: latestWeather.soilMoisture,
-                  rain24h: latestWeather.rain24h,
-                },
-                source: 'automation',
-              },
-            });
-          } catch (error) {
-            console.error(`Error running zone ${lawnZoneId}:`, error);
           }
-        } else {
-          console.log(`Skipping watering: zone ${lawnZoneId} was watered recently`);
         }
-      } else {
-        console.log('No lawn zone found, skipping dry boost rule');
+      } catch (error) {
+        console.error(`Error evaluating rule ${rule.id} (${rule.name}):`, error);
       }
     }
 
@@ -229,4 +327,3 @@ export async function evaluateRules(): Promise<void> {
     });
   }
 }
-
