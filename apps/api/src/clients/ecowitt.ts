@@ -37,6 +37,71 @@ export interface EcowittDeviceData {
     relative?: { time: string; unit: string; value: string };
     absolute?: { time: string; unit: string; value: string };
   };
+  // Soil moisture channels (soil_ch1 through soil_ch16)
+  soil_ch1?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch2?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch3?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch4?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch5?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch6?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch7?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch8?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch9?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch10?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch11?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch12?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch13?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch14?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch15?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
+  soil_ch16?: {
+    soilmoisture?: { time: string; unit: string; value: string };
+    ad?: { time: string; unit: string; value: string };
+  };
   [key: string]: unknown; // Allow other fields
 }
 
@@ -197,21 +262,35 @@ export class EcowittClient {
       }
     }
 
-    // Look for soil moisture in other sensor fields
-    // Soil moisture might be in sub-device fields like "WFC01-0xxxxxx8" or similar
-    for (const [key, value] of Object.entries(deviceData)) {
-      if (key.toLowerCase().includes('soil') && typeof value === 'object' && value !== null) {
-        const soilData = value as Record<string, { value?: string }>;
-        for (const [_field, fieldData] of Object.entries(soilData)) {
-          if (fieldData?.value) {
-            const moisture = parseFloat(fieldData.value);
-            if (!isNaN(moisture)) {
-              parsed.soilMoisture = moisture;
-              break;
-            }
-          }
+    // Parse soil moisture from soil_ch1 through soil_ch16
+    // Per Ecowitt API docs: soil_ch1.soilmoisture.value, etc.
+    // Use the first available soil channel (typically soil_ch1)
+    const soilChannels = [
+      deviceData.soil_ch1,
+      deviceData.soil_ch2,
+      deviceData.soil_ch3,
+      deviceData.soil_ch4,
+      deviceData.soil_ch5,
+      deviceData.soil_ch6,
+      deviceData.soil_ch7,
+      deviceData.soil_ch8,
+      deviceData.soil_ch9,
+      deviceData.soil_ch10,
+      deviceData.soil_ch11,
+      deviceData.soil_ch12,
+      deviceData.soil_ch13,
+      deviceData.soil_ch14,
+      deviceData.soil_ch15,
+      deviceData.soil_ch16,
+    ];
+
+    for (const soilChannel of soilChannels) {
+      if (soilChannel?.soilmoisture?.value) {
+        const moisture = parseFloat(soilChannel.soilmoisture.value);
+        if (!isNaN(moisture)) {
+          parsed.soilMoisture = moisture;
+          break;
         }
-        if (parsed.soilMoisture) break;
       }
     }
 
