@@ -31,7 +31,7 @@ export function createServer(): Express {
 
 export function startServer(): void {
   const app = createServer();
-  const port = process.env.PORT || 3001;
+  const port = parseInt(process.env.PORT || '3001', 10);
 
   const server = app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
