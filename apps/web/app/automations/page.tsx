@@ -44,26 +44,37 @@ export default function AutomationsPage() {
 
   const handleToggle = async (id: string, enabled: boolean, source?: 'custom' | 'rachio') => {
     try {
-      // Check if this is a Rachio schedule
-      if (source === 'rachio') {
-        // Extract the actual Rachio schedule ID (remove 'rachio_' prefix)
-        const rachioScheduleId = id.replace(/^rachio_/, '');
-        if (enabled) {
-          await rachioApi.enableSchedule(rachioScheduleId);
-        } else {
-          await rachioApi.disableSchedule(rachioScheduleId);
-        }
-      } else {
-        // Custom rule
+      // Only handle custom rules here - Rachio schedules use start/skip instead
+      if (source !== 'rachio') {
         if (enabled) {
           await automationApi.enableRule(id);
         } else {
           await automationApi.disableRule(id);
         }
+        await fetchRules();
       }
-      await fetchRules();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update rule');
+    }
+  };
+
+  const handleStartSchedule = async (id: string) => {
+    try {
+      const rachioScheduleId = id.replace(/^rachio_/, '');
+      await rachioApi.startSchedule(rachioScheduleId);
+      await fetchRules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start schedule');
+    }
+  };
+
+  const handleSkipSchedule = async (id: string) => {
+    try {
+      const rachioScheduleId = id.replace(/^rachio_/, '');
+      await rachioApi.skipSchedule(rachioScheduleId);
+      await fetchRules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to skip schedule');
     }
   };
 
@@ -211,6 +222,8 @@ export default function AutomationsPage() {
                           }}
                           onToggle={handleToggle}
                           onDelete={handleDelete}
+                          onStartSchedule={handleStartSchedule}
+                          onSkipSchedule={handleSkipSchedule}
                         />
                       )}
                     </div>
@@ -274,6 +287,8 @@ export default function AutomationsPage() {
                                 }}
                                 onToggle={handleToggle}
                                 onDelete={handleDelete}
+                                onStartSchedule={handleStartSchedule}
+                                onSkipSchedule={handleSkipSchedule}
                               />
                             </div>
                           ))}
@@ -318,11 +333,15 @@ function RuleView({
   onEdit,
   onToggle,
   onDelete,
+  onStartSchedule,
+  onSkipSchedule,
 }: {
   rule: AutomationRule;
   onEdit: () => void;
   onToggle: (id: string, enabled: boolean, source?: 'custom' | 'rachio') => void;
   onDelete: (id: string, source?: 'custom' | 'rachio') => void;
+  onStartSchedule?: (id: string) => void;
+  onSkipSchedule?: (id: string) => void;
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
   const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ name: string; duration: number; deviceName: string }>; totalDuration: number } | null>(null);
@@ -1047,30 +1066,54 @@ function RuleView({
               Details
             </button>
           )}
-          <button
-            onClick={() => onToggle(rule.id, !rule.enabled, rule.source)}
-            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              rule.enabled
-                ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
-                : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
-            }`}
-          >
-            {rule.enabled ? (
-              <>
+          {isRachioSchedule && onStartSchedule && onSkipSchedule ? (
+            <>
+              <button
+                onClick={() => onStartSchedule(rule.id)}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-all duration-200"
+              >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Disable
-              </>
-            ) : (
-              <>
+                Start
+              </button>
+              <button
+                onClick={() => onSkipSchedule(rule.id)}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-all duration-200"
+              >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                Enable
-              </>
-            )}
-          </button>
+                Skip
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onToggle(rule.id, !rule.enabled, rule.source)}
+              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                rule.enabled
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                  : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+              }`}
+            >
+              {rule.enabled ? (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  Disable
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Enable
+                </>
+              )}
+            </button>
+          )}
           {!isRachioSchedule && (
             <>
               <button

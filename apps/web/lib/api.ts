@@ -285,8 +285,12 @@ export const rachioApi = {
     await api.put(`/api/rachio/schedules/${id}/enable`);
   },
 
-  async disableSchedule(id: string): Promise<void> {
-    await api.put(`/api/rachio/schedules/${id}/disable`);
+  async startSchedule(id: string): Promise<void> {
+    await api.put(`/api/rachio/schedules/${id}/start`);
+  },
+
+  async skipSchedule(id: string): Promise<void> {
+    await api.put(`/api/rachio/schedules/${id}/skip`);
   },
 };
 

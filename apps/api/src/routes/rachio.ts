@@ -342,10 +342,10 @@ router.put('/schedules/:id/enable', async (req: Request, res: Response) => {
 });
 
 /**
- * PUT /api/rachio/schedules/:id/disable
- * Disable a Rachio schedule
+ * PUT /api/rachio/schedules/:id/start
+ * Start a Rachio schedule immediately
  */
-router.put('/schedules/:id/disable', async (req: Request, res: Response) => {
+router.put('/schedules/:id/start', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const apiKey = process.env.RACHIO_API_KEY;
@@ -355,12 +355,12 @@ router.put('/schedules/:id/disable', async (req: Request, res: Response) => {
     }
 
     const client = new RachioClient(apiKey);
-    await client.disableSchedule(id);
+    await client.startSchedule(id);
 
     // Log to audit log
     await prisma.auditLog.create({
       data: {
-        action: 'disable_rachio_schedule',
+        action: 'start_rachio_schedule',
         details: {
           scheduleId: id,
           source: 'api',
@@ -369,10 +369,45 @@ router.put('/schedules/:id/disable', async (req: Request, res: Response) => {
       },
     });
 
-    return res.json({ success: true, message: 'Schedule disabled' });
+    return res.json({ success: true, message: 'Schedule started' });
   } catch (error) {
-    console.error('Error disabling schedule:', error);
-    return res.status(500).json({ error: 'Failed to disable schedule' });
+    console.error('Error starting schedule:', error);
+    return res.status(500).json({ error: 'Failed to start schedule' });
+  }
+});
+
+/**
+ * PUT /api/rachio/schedules/:id/skip
+ * Skip the next occurrence of a Rachio schedule
+ */
+router.put('/schedules/:id/skip', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const apiKey = process.env.RACHIO_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    await client.skipSchedule(id);
+
+    // Log to audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'skip_rachio_schedule',
+        details: {
+          scheduleId: id,
+          source: 'api',
+        },
+        source: 'api',
+      },
+    });
+
+    return res.json({ success: true, message: 'Schedule skipped' });
+  } catch (error) {
+    console.error('Error skipping schedule:', error);
+    return res.status(500).json({ error: 'Failed to skip schedule' });
   }
 });
 

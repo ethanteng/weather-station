@@ -316,16 +316,30 @@ export class RachioClient {
   }
 
   /**
-   * Disable a schedule
+   * Start a schedule immediately
    * @param scheduleId Schedule ID
    */
-  async disableSchedule(scheduleId: string): Promise<void> {
+  async startSchedule(scheduleId: string): Promise<void> {
     try {
-      await this.client.put(`/scheduleRule/${scheduleId}/disable`);
-      console.log(`Disabled schedule ${scheduleId}`);
+      await this.client.put(`/schedulerule/${scheduleId}/start`);
+      console.log(`Started schedule ${scheduleId}`);
     } catch (error) {
-      console.error(`Error disabling schedule ${scheduleId}:`, error);
-      throw new Error(`Failed to disable schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`Error starting schedule ${scheduleId}:`, error);
+      throw new Error(`Failed to start schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Skip the next occurrence of a schedule
+   * @param scheduleId Schedule ID
+   */
+  async skipSchedule(scheduleId: string): Promise<void> {
+    try {
+      await this.client.put(`/schedulerule/${scheduleId}/skip`);
+      console.log(`Skipped schedule ${scheduleId}`);
+    } catch (error) {
+      console.error(`Error skipping schedule ${scheduleId}:`, error);
+      throw new Error(`Failed to skip schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }
