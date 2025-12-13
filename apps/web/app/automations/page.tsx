@@ -237,36 +237,47 @@ function RuleView({
         return;
       }
       if (rule.actions.type === 'run_zone') {
-        let zoneNames = '';
+        let zoneDisplay = '';
         if (rule.actions.zoneIds && rule.actions.zoneIds.length > 0) {
           try {
-            // Fetch zone names
+            // Fetch zone names with device names
             const devices = await rachioApi.getDevices();
+            const zoneDeviceMap = new Map<string, string>(); // zoneId -> deviceName
             const allZones: RachioZone[] = [];
+            
+            // Build device map and collect zones
             for (const device of devices) {
               if (device.zones) {
                 allZones.push(...device.zones);
+                device.zones.forEach(zone => {
+                  zoneDeviceMap.set(zone.id, device.name);
+                });
               }
             }
             
             const selectedZones = allZones.filter(zone => rule.actions.zoneIds?.includes(zone.id));
             if (selectedZones.length > 0) {
-              zoneNames = selectedZones.map(z => z.name).join(', ');
+              // Format as "Device Name - Zone Name"
+              const zoneStrings = selectedZones.map(z => {
+                const deviceName = zoneDeviceMap.get(z.id) || 'Unknown Device';
+                return `${deviceName} - ${z.name}`;
+              });
+              zoneDisplay = zoneStrings.join(', ');
             } else {
-              zoneNames = `${rule.actions.zoneIds.length} zone(s)`;
+              zoneDisplay = `${rule.actions.zoneIds.length} zone(s)`;
             }
           } catch (error) {
-            zoneNames = `${rule.actions.zoneIds.length} zone(s)`;
+            zoneDisplay = `${rule.actions.zoneIds.length} zone(s)`;
           }
         } else {
           // Backward compatibility: no zoneIds means it uses the old "find lawn zone" logic
-          zoneNames = 'Lawn Zone (auto)';
+          zoneDisplay = 'Lawn Zone (auto)';
         }
         
         setActionDisplay({
           icon: '🚿',
           label: 'Run Zone(s)',
-          value: `${rule.actions.minutes} minutes${zoneNames ? ` - ${zoneNames}` : ''}`,
+          value: `${rule.actions.minutes} minutes${zoneDisplay ? ` - ${zoneDisplay}` : ''}`,
         });
         return;
       }
@@ -462,6 +473,7 @@ function RuleEditor({
   const [conditions, setConditions] = useState(rule?.conditions || {});
   const [actions, setActions] = useState(rule?.actions || { type: 'set_rain_delay' as const });
   const [zones, setZones] = useState<RachioZone[]>([]);
+  const [zoneDeviceMap, setZoneDeviceMap] = useState<Map<string, string>>(new Map()); // zoneId -> deviceName
   const [loadingZones, setLoadingZones] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -511,18 +523,26 @@ function RuleEditor({
         try {
           const devices = await rachioApi.getDevices();
           const allZones: RachioZone[] = [];
+          const deviceMap = new Map<string, string>(); // zoneId -> deviceName
           
-          // Get all zones from all devices
+          // Get all zones from all devices and map them to device names
           for (const device of devices) {
             if (device.zones && device.zones.length > 0) {
-              allZones.push(...device.zones.filter(zone => zone.enabled));
+              const enabledZones = device.zones.filter(zone => zone.enabled);
+              allZones.push(...enabledZones);
+              // Map each zone to its device name
+              enabledZones.forEach(zone => {
+                deviceMap.set(zone.id, device.name);
+              });
             }
           }
           
           setZones(allZones);
+          setZoneDeviceMap(deviceMap);
         } catch (error) {
           console.error('Error fetching zones:', error);
           setZones([]);
+          setZoneDeviceMap(new Map());
         } finally {
           setLoadingZones(false);
         }
@@ -693,6 +713,7 @@ function RuleEditor({
                   <div className="border border-slate-300 rounded-lg bg-white max-h-48 overflow-y-auto">
                     {zones.map((zone) => {
                       const isSelected = (actions.zoneIds || []).includes(zone.id);
+                      const deviceName = zoneDeviceMap.get(zone.id) || 'Unknown Device';
                       return (
                         <label
                           key={zone.id}
@@ -706,7 +727,10 @@ function RuleEditor({
                             onChange={() => handleZoneToggle(zone.id)}
                             className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 focus:ring-2"
                           />
-                          <span className="ml-3 text-sm font-medium text-slate-700">{zone.name}</span>
+                          <div className="ml-3 flex-1">
+                            <div className="text-sm font-medium text-slate-700">{zone.name}</div>
+                            <div className="text-xs text-slate-500">{deviceName}</div>
+                          </div>
                         </label>
                       );
                     })}
