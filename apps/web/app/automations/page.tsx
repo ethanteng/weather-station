@@ -174,40 +174,117 @@ export default function AutomationsPage() {
         )}
 
         {/* Rules List */}
-        <div className="space-y-4">
-          {rules.map((rule) => (
-            <div
-              key={rule.id}
-              className={`bg-white rounded-xl shadow-md border transition-all duration-200 hover:shadow-lg ${
-                rule.enabled ? 'border-green-200' : 'border-slate-200 opacity-75'
-              }`}
-            >
-              {editingId === rule.id ? (
-                <div className="p-6">
-                  <div className="mb-4 pb-4 border-b border-slate-200">
-                    <h3 className="text-lg font-semibold text-slate-900">Editing Rule</h3>
-                  </div>
-                  <RuleEditor
-                    rule={rule}
-                    onSave={handleSave}
-                    onCancel={() => setEditingId(null)}
-                  />
-                </div>
-              ) : (
-                <RuleView
-                  rule={rule}
-                  onEdit={() => {
-                    // Only allow editing custom rules
-                    if (rule.source !== 'rachio') {
-                      setEditingId(rule.id);
-                    }
-                  }}
-                  onToggle={handleToggle}
-                  onDelete={handleDelete}
-                />
-              )}
+        <div className="space-y-8">
+          {/* Custom Rules Section */}
+          {rules.filter(r => r.source !== 'rachio').length > 0 && (
+            <div>
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-slate-900">Custom Automation Rules</h2>
+                <p className="text-sm text-slate-600 mt-1">Rules configured in this app</p>
+              </div>
+              <div className="space-y-4">
+                {rules
+                  .filter(r => r.source !== 'rachio')
+                  .map((rule) => (
+                    <div
+                      key={rule.id}
+                      className={`bg-white rounded-xl shadow-md border transition-all duration-200 hover:shadow-lg ${
+                        rule.enabled ? 'border-green-200' : 'border-slate-200 opacity-75'
+                      }`}
+                    >
+                      {editingId === rule.id ? (
+                        <div className="p-6">
+                          <div className="mb-4 pb-4 border-b border-slate-200">
+                            <h3 className="text-lg font-semibold text-slate-900">Editing Rule</h3>
+                          </div>
+                          <RuleEditor
+                            rule={rule}
+                            onSave={handleSave}
+                            onCancel={() => setEditingId(null)}
+                          />
+                        </div>
+                      ) : (
+                        <RuleView
+                          rule={rule}
+                          onEdit={() => {
+                            setEditingId(rule.id);
+                          }}
+                          onToggle={handleToggle}
+                          onDelete={handleDelete}
+                        />
+                      )}
+                    </div>
+                  ))}
+              </div>
             </div>
-          ))}
+          )}
+
+          {/* Rachio Schedules Section */}
+          {rules.filter(r => r.source === 'rachio').length > 0 && (
+            <div>
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-slate-900">Rachio Schedules</h2>
+                <p className="text-sm text-slate-600 mt-1">Schedules configured in the Rachio app</p>
+              </div>
+              {(() => {
+                // Group Rachio schedules by device name
+                const rachioRules = rules.filter(r => r.source === 'rachio');
+                const groupedByDevice = rachioRules.reduce((acc, rule) => {
+                  const deviceName = rule.deviceName || 'Unknown Device';
+                  if (!acc[deviceName]) {
+                    acc[deviceName] = [];
+                  }
+                  acc[deviceName].push(rule);
+                  return acc;
+                }, {} as Record<string, AutomationRule[]>);
+
+                // Sort device names (frontyard/backyard first if they exist)
+                const deviceNames = Object.keys(groupedByDevice).sort((a, b) => {
+                  const aLower = a.toLowerCase();
+                  const bLower = b.toLowerCase();
+                  if (aLower.includes('front') && !bLower.includes('front')) return -1;
+                  if (!aLower.includes('front') && bLower.includes('front')) return 1;
+                  if (aLower.includes('back') && !bLower.includes('back')) return -1;
+                  if (!aLower.includes('back') && bLower.includes('back')) return 1;
+                  return a.localeCompare(b);
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {deviceNames.map((deviceName) => (
+                      <div key={deviceName}>
+                        <div className="mb-3 flex items-center gap-2">
+                          <h3 className="text-xl font-semibold text-slate-800">{deviceName}</h3>
+                          <span className="text-sm text-slate-500">
+                            ({groupedByDevice[deviceName].length} schedule{groupedByDevice[deviceName].length !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                        <div className="space-y-4">
+                          {groupedByDevice[deviceName].map((rule) => (
+                            <div
+                              key={rule.id}
+                              className={`bg-white rounded-xl shadow-md border transition-all duration-200 hover:shadow-lg ${
+                                rule.enabled ? 'border-green-200' : 'border-slate-200 opacity-75'
+                              }`}
+                            >
+                              <RuleView
+                                rule={rule}
+                                onEdit={() => {
+                                  // Rachio schedules cannot be edited
+                                }}
+                                onToggle={handleToggle}
+                                onDelete={handleDelete}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Empty State */}
@@ -399,37 +476,44 @@ function RuleView({
     <div className={`p-6 ${isRachioSchedule ? 'bg-gradient-to-r from-indigo-50/50 to-purple-50/50 border-l-4 border-indigo-400' : ''}`}>
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
-            {isRachioSchedule && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                📅 Rachio Schedule
-              </span>
-            )}
-            <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                rule.enabled
-                  ? 'bg-green-100 text-green-800 border border-green-200'
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}
-            >
-              {rule.enabled ? (
-                <>
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                  Enabled
-                </>
-              ) : (
-                <>
-                  <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
-                  Disabled
-                </>
-              )}
-            </span>
+          <div className="mb-3">
             {isRachioSchedule && rule.deviceName && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                🏠 {rule.deviceName}
-              </span>
+              <div className="mb-2">
+                <span className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border-2 border-indigo-300 shadow-sm">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  {rule.deviceName}
+                </span>
+              </div>
             )}
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
+              {isRachioSchedule && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  📅 Rachio Schedule
+                </span>
+              )}
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                  rule.enabled
+                    ? 'bg-green-100 text-green-800 border border-green-200'
+                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }`}
+              >
+                {rule.enabled ? (
+                  <>
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                    Enabled
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
+                    Disabled
+                  </>
+                )}
+              </span>
+            </div>
           </div>
 
           {/* Rachio Schedule Display */}
