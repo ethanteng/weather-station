@@ -5,8 +5,8 @@ import { findLawnZone } from './zoneFinder';
 const prisma = new PrismaClient();
 
 interface AutomationResult {
-  ruleId: string;
-  ruleName: string;
+  ruleId?: string;
+  ruleName?: string;
   triggered: boolean;
   action?: string;
   details?: Record<string, unknown>;
@@ -126,8 +126,6 @@ async function executeAction(
     }
 
     return {
-      ruleId: '',
-      ruleName: '',
       triggered: true,
       action: `set_rain_delay_${actions.hours}h`,
       details: {
@@ -197,8 +195,6 @@ async function executeAction(
       });
 
       return {
-        ruleId: '',
-        ruleName: '',
         triggered: true,
         action: `run_zone_${actions.minutes}min`,
         details: {
@@ -276,8 +272,8 @@ export async function evaluateRules(): Promise<void> {
     // Evaluate each rule
     for (const rule of rules) {
       try {
-        const conditions = rule.conditions as Conditions;
-        const actions = rule.actions as Actions;
+        const conditions = rule.conditions as unknown as Conditions;
+        const actions = rule.actions as unknown as Actions;
 
         // Check if conditions are met
         if (evaluateConditions(conditions, weather)) {
@@ -286,9 +282,9 @@ export async function evaluateRules(): Promise<void> {
 
           if (result) {
             results.push({
+              ...result,
               ruleId: rule.id,
               ruleName: rule.name,
-              ...result,
             });
 
             // Update rule's last run info
