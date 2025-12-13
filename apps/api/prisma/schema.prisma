@@ -1,0 +1,101 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model WeatherReading {
+  id            String   @id @default(cuid())
+  timestamp     DateTime @default(now()) @db.Timestamptz(6)
+  temperature   Float?
+  humidity      Float?
+  pressure      Float?
+  rain1h        Float?   @map("rain_1h")
+  rain24h       Float?   @map("rain_24h")
+  rainTotal     Float?   @map("rain_total")
+  soilMoisture  Float?   @map("soil_moisture")
+  rawPayload    Json     @map("raw_payload")
+
+  @@index([timestamp])
+  @@map("weather_readings")
+}
+
+model RachioDevice {
+  id          String   @id
+  name        String
+  status      String
+  rawPayload  Json     @map("raw_payload")
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  zones       RachioZone[]
+
+  @@map("rachio_devices")
+}
+
+model RachioZone {
+  id          String   @id
+  deviceId    String   @map("device_id")
+  name        String
+  enabled     Boolean
+  rawPayload  Json     @map("raw_payload")
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  device      RachioDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  events      WateringEvent[]
+
+  @@index([deviceId])
+  @@map("rachio_zones")
+}
+
+model WateringEvent {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+  zoneId      String   @map("zone_id")
+  durationSec Int      @map("duration_sec")
+  source      WateringSource
+  rawPayload  Json?    @map("raw_payload")
+
+  zone        RachioZone @relation(fields: [zoneId], references: [id])
+
+  @@index([timestamp])
+  @@index([zoneId])
+  @@map("watering_events")
+}
+
+enum WateringSource {
+  manual
+  schedule
+  automation
+}
+
+model AutomationRule {
+  id          String   @id @default(cuid())
+  name        String
+  enabled     Boolean  @default(true)
+  conditions  Json
+  actions     Json
+  lastRunAt   DateTime? @map("last_run_at") @db.Timestamptz(6)
+  lastResult  String?   @map("last_result")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("automation_rules")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+  action      String
+  details     Json
+  source      String
+
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
