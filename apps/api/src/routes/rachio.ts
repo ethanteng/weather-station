@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
  * GET /api/rachio/devices
  * Get all Rachio devices
  */
-router.get('/devices', async (req: Request, res: Response) => {
+router.get('/devices', async (_req: Request, res: Response) => {
   try {
     const devices = await prisma.rachioDevice.findMany({
       include: {
@@ -17,10 +17,10 @@ router.get('/devices', async (req: Request, res: Response) => {
       },
     });
 
-    res.json(devices);
+    return res.json(devices);
   } catch (error) {
     console.error('Error fetching Rachio devices:', error);
-    res.status(500).json({ error: 'Failed to fetch devices' });
+    return res.status(500).json({ error: 'Failed to fetch devices' });
   }
 });
 
@@ -43,10 +43,10 @@ router.get('/zones', async (req: Request, res: Response) => {
       },
     });
 
-    res.json(zones);
+    return res.json(zones);
   } catch (error) {
     console.error('Error fetching Rachio zones:', error);
-    res.status(500).json({ error: 'Failed to fetch zones' });
+    return res.status(500).json({ error: 'Failed to fetch zones' });
   }
 });
 
@@ -84,10 +84,10 @@ router.post('/rain-delay', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, message: `Rain delay set for ${hours} hours` });
+    return res.json({ success: true, message: `Rain delay set for ${hours} hours` });
   } catch (error) {
     console.error('Error setting rain delay:', error);
-    res.status(500).json({ error: 'Failed to set rain delay' });
+    return res.status(500).json({ error: 'Failed to set rain delay' });
   }
 });
 
@@ -140,10 +140,10 @@ router.post('/zone/run', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, message: `Zone running for ${minutes} minutes` });
+    return res.json({ success: true, message: `Zone running for ${minutes} minutes` });
   } catch (error) {
     console.error('Error running zone:', error);
-    res.status(500).json({ error: 'Failed to run zone' });
+    return res.status(500).json({ error: 'Failed to run zone' });
   }
 });
 
@@ -180,10 +180,10 @@ router.post('/stop', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, message: 'Watering stopped' });
+    return res.json({ success: true, message: 'Watering stopped' });
   } catch (error) {
     console.error('Error stopping watering:', error);
-    res.status(500).json({ error: 'Failed to stop watering' });
+    return res.status(500).json({ error: 'Failed to stop watering' });
   }
 });
 
@@ -192,7 +192,7 @@ router.post('/stop', async (req: Request, res: Response) => {
  * Get recent watering events
  * Query params: limit (default 10)
  */
-router.get('/watering-events', async (req: Request, res: Response) => {
+router.get('/watering-events', async (_req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
 
@@ -211,7 +211,7 @@ router.get('/watering-events', async (req: Request, res: Response) => {
       },
     });
 
-    res.json(events.map(event => ({
+    return res.json(events.map(event => ({
       id: event.id,
       timestamp: event.timestamp,
       zoneId: event.zoneId,
@@ -221,7 +221,7 @@ router.get('/watering-events', async (req: Request, res: Response) => {
     })));
   } catch (error) {
     console.error('Error fetching watering events:', error);
-    res.status(500).json({ error: 'Failed to fetch watering events' });
+    return res.status(500).json({ error: 'Failed to fetch watering events' });
   }
 });
 

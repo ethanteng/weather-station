@@ -108,7 +108,7 @@ export class EcowittClient {
     // - Soil Moisture: soil_moisture, soil_moisture_1, soil_moisture_2
 
     // Iterate through sensors to find relevant data
-    for (const [sensorId, sensorFields] of Object.entries(sensorData)) {
+    for (const [_sensorId, sensorFields] of Object.entries(sensorData)) {
       for (const [field, value] of Object.entries(sensorFields)) {
         const fieldLower = field.toLowerCase();
         const numValue = typeof value === 'number' ? value : null;
@@ -153,7 +153,9 @@ export class EcowittClient {
 
   /**
    * Retry wrapper for API calls
+   * Currently unused but available for future use
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async retry<T>(
     fn: () => Promise<T>,
     maxRetries = 3,

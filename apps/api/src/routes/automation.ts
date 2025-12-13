@@ -14,7 +14,7 @@ const router = Router();
  * GET /api/automations
  * Get list of automation rules (hardcoded for Phase 1)
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     // Return hardcoded rules for Phase 1
     const rules = [
@@ -60,10 +60,10 @@ router.get('/', async (req: Request, res: Response) => {
       },
     ];
 
-    res.json(rules);
+    return res.json(rules);
   } catch (error) {
     console.error('Error fetching automations:', error);
-    res.status(500).json({ error: 'Failed to fetch automations' });
+    return res.status(500).json({ error: 'Failed to fetch automations' });
   }
 });
 
@@ -71,13 +71,13 @@ router.get('/', async (req: Request, res: Response) => {
  * POST /api/automations/run
  * Manually trigger automation evaluation
  */
-router.post('/run', async (req: Request, res: Response) => {
+router.post('/run', async (_req: Request, res: Response) => {
   try {
     await evaluateRules();
-    res.json({ success: true, message: 'Automation rules evaluated' });
+    return res.json({ success: true, message: 'Automation rules evaluated' });
   } catch (error) {
     console.error('Error running automations:', error);
-    res.status(500).json({ error: 'Failed to run automations' });
+    return res.status(500).json({ error: 'Failed to run automations' });
   }
 });
 

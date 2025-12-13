@@ -34,10 +34,8 @@ export interface RachioRainDelay {
 
 export class RachioClient {
   private client: AxiosInstance;
-  private apiKey: string;
 
   constructor(apiKey: string) {
-    this.apiKey = apiKey;
 
     this.client = axios.create({
       baseURL: 'https://api.rach.io/1/public',

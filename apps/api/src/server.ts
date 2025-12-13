@@ -17,7 +17,7 @@ export function createServer(): Express {
   app.use(express.json());
 
   // Health check (no auth required)
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 

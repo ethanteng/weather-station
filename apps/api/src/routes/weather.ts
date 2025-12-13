@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
  * GET /api/weather/latest
  * Get the most recent weather reading
  */
-router.get('/latest', async (req: Request, res: Response) => {
+router.get('/latest', async (_req: Request, res: Response) => {
   try {
     const reading = await prisma.weatherReading.findFirst({
       orderBy: {
@@ -20,10 +20,10 @@ router.get('/latest', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'No weather data available' });
     }
 
-    res.json(reading);
+    return res.json(reading);
   } catch (error) {
     console.error('Error fetching latest weather:', error);
-    res.status(500).json({ error: 'Failed to fetch weather data' });
+    return res.status(500).json({ error: 'Failed to fetch weather data' });
   }
 });
 
@@ -87,7 +87,7 @@ router.get('/summary', async (req: Request, res: Response) => {
 
     const latest = readings[readings.length - 1];
 
-    res.json({
+    return res.json({
       range,
       count: readings.length,
       latest: {
@@ -115,7 +115,7 @@ router.get('/summary', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching weather summary:', error);
-    res.status(500).json({ error: 'Failed to fetch weather summary' });
+    return res.status(500).json({ error: 'Failed to fetch weather summary' });
   }
 });
 
