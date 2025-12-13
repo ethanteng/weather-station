@@ -1,6 +1,29 @@
 import axios, { AxiosInstance } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Determine API URL dynamically based on current hostname
+// This allows the app to work whether accessed via localhost or network IP
+function getApiUrl(): string {
+  // If explicitly set in env, use that
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // Otherwise, detect based on current hostname
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If accessing via localhost, use localhost for API
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+    // Otherwise, use the same hostname with port 3001
+    return `http://${hostname}:3001`;
+  }
+  
+  // Fallback for SSR
+  return 'http://localhost:3001';
+}
+
+const API_URL = getApiUrl();
 
 // Note: In a real app, you'd handle auth differently
 // For Phase 1, we'll use a simple approach
