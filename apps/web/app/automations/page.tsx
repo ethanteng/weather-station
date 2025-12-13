@@ -326,7 +326,67 @@ function RuleView({
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
   const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ name: string; duration: number; deviceName: string }>; totalDuration: number } | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const isRachioSchedule = rule.source === 'rachio';
+
+  // Formatting helper functions
+  const formatInterval = (interval?: number): string => {
+    if (!interval) return 'Not set';
+    if (interval === 1) return 'Every day';
+    if (interval < 7) return `Every ${interval} days`;
+    if (interval === 7) return 'Every week';
+    if (interval < 14) return `Every ${interval} days (${Math.round(interval / 7)} weeks)`;
+    if (interval === 14) return 'Every 14 days (2 weeks)';
+    if (interval < 30) return `Every ${interval} days (${Math.round(interval / 7)} weeks)`;
+    if (interval === 30) return 'Every month';
+    return `Every ${interval} days`;
+  };
+
+  const formatStartTime = (startTime?: number): string => {
+    if (!startTime) return 'Not set';
+    // Handle seconds since midnight (0-86399)
+    if (startTime < 86400) {
+      const hours = Math.floor(startTime / 3600);
+      const minutes = Math.floor((startTime % 3600) / 60);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `Start after ${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    }
+    // Handle timestamp - convert to time
+    const date = new Date(startTime);
+    return `Start after ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  };
+
+  const formatDateRange = (startDate?: number, endDate?: number | null): { range: string; repeat: string } => {
+    if (!startDate) {
+      return { range: 'Not set', repeat: '' };
+    }
+    
+    const start = new Date(startDate);
+    const startFormatted = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    if (!endDate) {
+      return { range: `${startFormatted} - Never`, repeat: 'Does not repeat' };
+    }
+    
+    const end = new Date(endDate);
+    const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    // Determine repeat status from repeat config or interval
+    let repeatText = 'Does not repeat';
+    if (rule.repeat) {
+      if (rule.repeat.type === 'DAILY') repeatText = 'Repeats daily';
+      else if (rule.repeat.type === 'WEEKLY') repeatText = 'Repeats weekly';
+      else if (rule.repeat.type === 'MONTHLY') repeatText = 'Repeats monthly';
+      else if (rule.interval && rule.interval > 0) {
+        repeatText = `Repeats every ${rule.interval} days`;
+      }
+    } else if (rule.interval && rule.interval > 0) {
+      repeatText = `Repeats every ${rule.interval} days`;
+    }
+    
+    return { range: `${startFormatted} - ${endFormatted}`, repeat: repeatText };
+  };
 
   useEffect(() => {
     const loadActionDisplay = async () => {
@@ -490,9 +550,18 @@ function RuleView({
             <div className="flex items-center gap-3 flex-wrap">
               <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
               {isRachioSchedule && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                  📅 Rachio Schedule
-                </span>
+                <>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    📅 Rachio Schedule
+                  </span>
+                  {rule.color && (
+                    <span
+                      className="inline-block w-6 h-6 rounded border-2 border-slate-300"
+                      style={{ backgroundColor: rule.color }}
+                      title={`Schedule color: ${rule.color}`}
+                    />
+                  )}
+                </>
               )}
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
@@ -513,6 +582,23 @@ function RuleView({
                   </>
                 )}
               </span>
+              {isRachioSchedule && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="ml-auto inline-flex items-center px-3 py-1 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-all"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="mr-2">Details</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -537,6 +623,142 @@ function RuleView({
                   <div className="mt-2 text-sm text-slate-600">
                     <span className="font-medium">Total Duration: </span>
                     <span className="font-semibold">{rachioScheduleDisplay.totalDuration} minutes</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Expandable Rachio Schedule Details */}
+          {isRachioSchedule && isExpanded && (
+            <div className="mt-4 pt-4 border-t border-indigo-200">
+              <div className="space-y-4">
+                {/* Watering Interval */}
+                {rule.interval !== undefined && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Watering Interval</div>
+                      <div className="text-sm font-medium text-slate-900">{formatInterval(rule.interval)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Start Time */}
+                {rule.startTime !== undefined && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start Time</div>
+                      <div className="text-sm font-medium text-slate-900">{formatStartTime(rule.startTime)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Date Range */}
+                {(rule.startDate !== undefined || rule.endDate !== null) && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start/End Dates</div>
+                      <div className="text-sm font-medium text-slate-900">{formatDateRange(rule.startDate, rule.endDate).range}</div>
+                      {formatDateRange(rule.startDate, rule.endDate).repeat && (
+                        <div className="text-xs text-slate-500 mt-1">{formatDateRange(rule.startDate, rule.endDate).repeat}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cycle and Soak */}
+                {rule.cycleSoak && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Cycle and Soak</div>
+                      <div className="text-sm font-medium text-slate-900">{rule.cycleSoak}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Weather Intelligence */}
+                {rule.weatherIntelligence && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Weather Intelligence</div>
+                      <div className="space-y-1.5">
+                        {rule.weatherIntelligence.rainSkip !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-24">Rain Skip:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.rainSkip
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.rainSkip ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                        {rule.weatherIntelligence.freezeSkip !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-24">Freeze Skip:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.freezeSkip
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.freezeSkip ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                        {rule.weatherIntelligence.windSkip !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-24">Wind Skip:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.windSkip
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.windSkip ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                        {rule.weatherIntelligence.saturationSkip !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-24">Saturation Skip:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.saturationSkip
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.saturationSkip ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                        {rule.weatherIntelligence.seasonalShift !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-24">Seasonal Shift:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.seasonalShift
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.seasonalShift ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

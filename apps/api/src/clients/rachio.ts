@@ -38,6 +38,14 @@ export interface RachioScheduleZone {
   sortOrder: number;
 }
 
+export interface RachioWeatherIntelligence {
+  rainSkip?: boolean;
+  freezeSkip?: boolean;
+  windSkip?: boolean;
+  saturationSkip?: boolean;
+  seasonalShift?: boolean;
+}
+
 export interface RachioSchedule {
   id: string;
   name: string;
@@ -46,6 +54,13 @@ export interface RachioSchedule {
   startDate?: number;
   totalDuration?: number;
   deviceId: string;
+  interval?: number; // Days between waterings
+  startTime?: number; // Start time (seconds since midnight or timestamp)
+  endDate?: number | null; // End date timestamp
+  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  weatherIntelligence?: RachioWeatherIntelligence;
+  color?: string | null; // Hex color code
+  repeat?: any; // Repeat configuration object
   [key: string]: unknown;
 }
 
@@ -195,6 +210,20 @@ export class RachioClient {
         startDate: schedule.startDate,
         totalDuration: schedule.totalDuration,
         deviceId: deviceId,
+        interval: schedule.interval || schedule.frequency || undefined,
+        startTime: schedule.startTime || schedule.startTimeOfDay || undefined,
+        endDate: schedule.endDate || schedule.endDateTimestamp || null,
+        cycleSoak: schedule.cycleSoak || schedule.smartCycle || schedule.cycleAndSoak || null,
+        weatherIntelligence: {
+          rainSkip: schedule.rainSkip !== false && schedule.rainSkip !== undefined ? schedule.rainSkip : undefined,
+          freezeSkip: schedule.freezeSkip !== false && schedule.freezeSkip !== undefined ? schedule.freezeSkip : undefined,
+          windSkip: schedule.windSkip !== false && schedule.windSkip !== undefined ? schedule.windSkip : undefined,
+          saturationSkip: schedule.saturationSkip !== false && schedule.saturationSkip !== undefined ? schedule.saturationSkip : undefined,
+          seasonalShift: schedule.seasonalShift !== false && schedule.seasonalShift !== undefined ? schedule.seasonalShift : undefined,
+        },
+        color: schedule.color || schedule.scheduleColor || null,
+        repeat: schedule.repeat || schedule.repeatConfig || undefined,
+        ...schedule, // Include all other fields from the API response
       }));
     } catch (error) {
       console.error(`Error fetching schedules for device ${deviceId}:`, error);

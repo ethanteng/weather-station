@@ -50,6 +50,15 @@ router.get('/', async (_req: Request, res: Response) => {
               deviceId: schedule.deviceId,
               deviceName: device.name,
               scheduleZones: schedule.zones, // Keep original zone data with durations
+              // Pass through additional Rachio schedule fields
+              interval: schedule.interval,
+              startTime: schedule.startTime,
+              startDate: schedule.startDate,
+              endDate: schedule.endDate,
+              cycleSoak: schedule.cycleSoak,
+              weatherIntelligence: schedule.weatherIntelligence,
+              color: schedule.color,
+              repeat: schedule.repeat,
             }));
             rachioSchedules.push(...transformedSchedules);
           } catch (error) {

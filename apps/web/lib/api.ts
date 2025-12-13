@@ -130,6 +130,14 @@ export interface RachioScheduleZone {
   sortOrder: number;
 }
 
+export interface RachioWeatherIntelligence {
+  rainSkip?: boolean;
+  freezeSkip?: boolean;
+  windSkip?: boolean;
+  saturationSkip?: boolean;
+  seasonalShift?: boolean;
+}
+
 export interface RachioSchedule {
   id: string;
   name: string;
@@ -138,6 +146,13 @@ export interface RachioSchedule {
   startDate?: number;
   totalDuration?: number;
   deviceId: string;
+  interval?: number; // Days between waterings
+  startTime?: number; // Start time (seconds since midnight or timestamp)
+  endDate?: number | null; // End date timestamp
+  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  weatherIntelligence?: RachioWeatherIntelligence;
+  color?: string | null; // Hex color code
+  repeat?: any; // Repeat configuration object
 }
 
 export interface AutomationRule {
@@ -165,6 +180,14 @@ export interface AutomationRule {
   deviceId?: string; // For Rachio schedules
   deviceName?: string; // For Rachio schedules
   scheduleZones?: RachioScheduleZone[]; // Original zone data with durations for Rachio schedules
+  // Additional Rachio schedule fields
+  interval?: number; // Days between waterings
+  startTime?: number; // Start time (seconds since midnight or timestamp)
+  endDate?: number | null; // End date timestamp
+  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  weatherIntelligence?: RachioWeatherIntelligence;
+  color?: string | null; // Hex color code
+  repeat?: any; // Repeat configuration object
 }
 
 export interface DailyForecast {
