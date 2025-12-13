@@ -3,6 +3,17 @@
  * Run manually after first Rachio sync: npm run db:seed --workspace=apps/api
  */
 
+// Load environment variables from root .env file
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Try to load .env from root directory (workspace root)
+// When running from apps/api, go up 2 levels; when from workspace root, use current dir
+const rootEnv = resolve(process.cwd(), '../../.env');
+const currentEnv = resolve(process.cwd(), '.env');
+config({ path: rootEnv });
+config({ path: currentEnv });
+
 import { PrismaClient } from '@prisma/client';
 import {
   RAIN_DELAY_THRESHOLD_INCHES,
