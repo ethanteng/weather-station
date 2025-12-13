@@ -13,8 +13,31 @@ export interface EcowittSensorData {
 }
 
 export interface EcowittDeviceData {
-  device: EcowittDevice;
-  sensors: EcowittSensorData;
+  outdoor?: {
+    temperature?: { time: string; unit: string; value: string };
+    humidity?: { time: string; unit: string; value: string };
+    feels_like?: { time: string; unit: string; value: string };
+    app_temp?: { time: string; unit: string; value: string };
+    dew_point?: { time: string; unit: string; value: string };
+  };
+  indoor?: {
+    temperature?: { time: string; unit: string; value: string };
+    humidity?: { time: string; unit: string; value: string };
+  };
+  rainfall?: {
+    rain_rate?: { time: string; unit: string; value: string };
+    daily?: { time: string; unit: string; value: string };
+    event?: { time: string; unit: string; value: string };
+    hourly?: { time: string; unit: string; value: string };
+    weekly?: { time: string; unit: string; value: string };
+    monthly?: { time: string; unit: string; value: string };
+    yearly?: { time: string; unit: string; value: string };
+  };
+  pressure?: {
+    relative?: { time: string; unit: string; value: string };
+    absolute?: { time: string; unit: string; value: string };
+  };
+  [key: string]: unknown; // Allow other fields
 }
 
 export interface ParsedWeatherData {
@@ -46,13 +69,13 @@ export class EcowittClient {
   }
 
   /**
-   * Normalize MAC address format for Ecowitt API
-   * Removes colons and converts to uppercase
-   * Example: "AA:BB:CC:DD:EE:FF" -> "AABBCCDDEEFF"
+   * Format MAC address for Ecowitt API
+   * Ecowitt API expects MAC addresses with colons: "FF:FF:FF:FF:FF:FF"
    */
-  private normalizeMacAddress(mac: string): string {
-    // Remove colons and spaces, convert to uppercase
-    return mac.replace(/[:-\s]/g, '').toUpperCase();
+  private formatMacAddress(mac: string): string {
+    // Remove existing colons/spaces, then add colons every 2 characters
+    const cleaned = mac.replace(/[:-\s]/g, '').toUpperCase();
+    return cleaned.match(/.{2}/g)?.join(':') || cleaned;
   }
 
   /**
@@ -79,85 +102,116 @@ export class EcowittClient {
   }
 
   /**
-   * Get device data including sensor readings
+   * Get device real-time data including sensor readings
+   * Uses /device/real_time endpoint per Ecowitt API v3 documentation
    */
   async getDeviceData(deviceId: string): Promise<EcowittDeviceData> {
     try {
-      // Normalize MAC address format
-      const normalizedMac = this.normalizeMacAddress(deviceId);
+      // Format MAC address with colons as required by Ecowitt API
+      const macAddress = this.formatMacAddress(deviceId);
       
-      const response = await this.client.get('/device/data', {
+      console.log(`Fetching Ecowitt device data for MAC: ${macAddress}`);
+      
+      const response = await this.client.get('/device/real_time', {
         params: {
           application_key: this.applicationKey,
           api_key: this.apiKey,
-          mac: normalizedMac,
+          mac: macAddress,
+          call_back: 'all', // Request all available data
         },
       });
 
-      // TODO: Verify response structure from Ecowitt API v3
       // Log raw payload for debugging
       console.log(`Ecowitt device data response for ${deviceId}:`, JSON.stringify(response.data, null, 2));
 
-      return response.data?.data || {};
-    } catch (error) {
+      // Check if response indicates success (code 0 = success per API docs)
+      if (response.data?.code === 0 && response.data?.data) {
+        return response.data.data as EcowittDeviceData;
+      }
+      
+      // If code is not 0, log the error message
+      if (response.data?.code !== undefined && response.data?.code !== 0) {
+        throw new Error(`Ecowitt API returned code ${response.data.code}: ${response.data.msg || 'Unknown error'}`);
+      }
+
+      throw new Error('Invalid response structure from Ecowitt API');
+    } catch (error: any) {
       console.error(`Error fetching Ecowitt device data for ${deviceId}:`, error);
       throw new Error(`Failed to fetch Ecowitt device data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Parse weather data from Ecowitt sensor data
-   * TODO: Map actual sensor channels based on discovery endpoint results
+   * Parse weather data from Ecowitt API v3 response structure
+   * Maps the nested structure (outdoor.temperature.value, rainfall.hourly.value, etc.)
    */
-  parseWeatherData(sensorData: EcowittSensorData): ParsedWeatherData {
+  parseWeatherData(deviceData: EcowittDeviceData): ParsedWeatherData {
     const parsed: ParsedWeatherData = {};
 
-    // TODO: Update these field names based on actual Ecowitt API v3 response structure
-    // Common field names to check:
-    // - Temperature: temp, temperature, outdoor_temp
-    // - Humidity: humidity, outdoor_humidity
-    // - Pressure: pressure, barometric_pressure
-    // - Rainfall: rain_1h, rain_24h, rain_total, rainfall_1h, rainfall_24h
-    // - Soil Moisture: soil_moisture, soil_moisture_1, soil_moisture_2
+    // Parse temperature from outdoor.temperature.value
+    if (deviceData.outdoor?.temperature?.value) {
+      const temp = parseFloat(deviceData.outdoor.temperature.value);
+      if (!isNaN(temp)) {
+        parsed.temperature = temp;
+      }
+    }
 
-    // Iterate through sensors to find relevant data
-    for (const [_sensorId, sensorFields] of Object.entries(sensorData)) {
-      for (const [field, value] of Object.entries(sensorFields)) {
-        const fieldLower = field.toLowerCase();
-        const numValue = typeof value === 'number' ? value : null;
+    // Parse humidity from outdoor.humidity.value
+    if (deviceData.outdoor?.humidity?.value) {
+      const hum = parseFloat(deviceData.outdoor.humidity.value);
+      if (!isNaN(hum)) {
+        parsed.humidity = hum;
+      }
+    }
 
-        if (numValue === null) continue;
+    // Parse pressure from pressure.relative.value (or absolute)
+    if (deviceData.pressure?.relative?.value) {
+      const press = parseFloat(deviceData.pressure.relative.value);
+      if (!isNaN(press)) {
+        parsed.pressure = press;
+      }
+    } else if (deviceData.pressure?.absolute?.value) {
+      const press = parseFloat(deviceData.pressure.absolute.value);
+      if (!isNaN(press)) {
+        parsed.pressure = press;
+      }
+    }
 
-        // Temperature mapping
-        if ((fieldLower.includes('temp') || fieldLower.includes('temperature')) && !parsed.temperature) {
-          parsed.temperature = numValue;
-        }
+    // Parse rainfall - hourly = rain1h, daily = rain24h
+    if (deviceData.rainfall?.hourly?.value) {
+      const rain1h = parseFloat(deviceData.rainfall.hourly.value);
+      if (!isNaN(rain1h)) {
+        parsed.rain1h = rain1h;
+      }
+    }
+    if (deviceData.rainfall?.daily?.value) {
+      const rain24h = parseFloat(deviceData.rainfall.daily.value);
+      if (!isNaN(rain24h)) {
+        parsed.rain24h = rain24h;
+      }
+    }
+    if (deviceData.rainfall?.yearly?.value) {
+      const rainTotal = parseFloat(deviceData.rainfall.yearly.value);
+      if (!isNaN(rainTotal)) {
+        parsed.rainTotal = rainTotal;
+      }
+    }
 
-        // Humidity mapping
-        if ((fieldLower.includes('humidity') || fieldLower.includes('hum')) && !parsed.humidity) {
-          parsed.humidity = numValue;
+    // Look for soil moisture in other sensor fields
+    // Soil moisture might be in sub-device fields like "WFC01-0xxxxxx8" or similar
+    for (const [key, value] of Object.entries(deviceData)) {
+      if (key.toLowerCase().includes('soil') && typeof value === 'object' && value !== null) {
+        const soilData = value as Record<string, { value?: string }>;
+        for (const [field, fieldData] of Object.entries(soilData)) {
+          if (fieldData?.value) {
+            const moisture = parseFloat(fieldData.value);
+            if (!isNaN(moisture)) {
+              parsed.soilMoisture = moisture;
+              break;
+            }
+          }
         }
-
-        // Pressure mapping
-        if ((fieldLower.includes('pressure') || fieldLower.includes('barometric')) && !parsed.pressure) {
-          parsed.pressure = numValue;
-        }
-
-        // Rainfall mappings
-        if (fieldLower.includes('rain_1h') || fieldLower.includes('rainfall_1h')) {
-          parsed.rain1h = numValue;
-        }
-        if (fieldLower.includes('rain_24h') || fieldLower.includes('rainfall_24h')) {
-          parsed.rain24h = numValue;
-        }
-        if (fieldLower.includes('rain_total') || fieldLower.includes('rainfall_total')) {
-          parsed.rainTotal = numValue;
-        }
-
-        // Soil moisture mapping
-        if (fieldLower.includes('soil_moisture') || fieldLower.includes('soil')) {
-          parsed.soilMoisture = numValue;
-        }
+        if (parsed.soilMoisture) break;
       }
     }
 

@@ -44,8 +44,8 @@ export async function pollWeatherData(): Promise<void> {
     // Get device data using MAC address
     const deviceData = await client.getDeviceData(macAddress);
 
-    // Parse weather data
-    const parsed = client.parseWeatherData(deviceData.sensors || {});
+    // Parse weather data from the Ecowitt API v3 response structure
+    const parsed = client.parseWeatherData(deviceData);
 
     // Store in database
     await prisma.weatherReading.create({
