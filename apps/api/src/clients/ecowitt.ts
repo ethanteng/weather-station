@@ -202,7 +202,7 @@ export class EcowittClient {
     for (const [key, value] of Object.entries(deviceData)) {
       if (key.toLowerCase().includes('soil') && typeof value === 'object' && value !== null) {
         const soilData = value as Record<string, { value?: string }>;
-        for (const [field, fieldData] of Object.entries(soilData)) {
+        for (const [_field, fieldData] of Object.entries(soilData)) {
           if (fieldData?.value) {
             const moisture = parseFloat(fieldData.value);
             if (!isNaN(moisture)) {
