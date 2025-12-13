@@ -57,6 +57,10 @@ ADMIN_PASSWORD=change_me_in_production
 
 # Next.js
 NEXT_PUBLIC_API_URL=http://localhost:3001
+
+# Forecast (Open-Meteo - no API key required)
+FORECAST_LAT=37.8
+FORECAST_LON=-122.2
 ```
 
 ### 3. Start Postgres Database
@@ -121,6 +125,12 @@ All API endpoints require authentication via `Authorization: Bearer <ADMIN_PASSW
 - `GET /api/weather/latest` - Get most recent weather reading
 - `GET /api/weather/summary?range=24h|7d|30d` - Get aggregated weather statistics
 
+### Forecast
+- `GET /api/forecast/7day?lat=<latitude>&lon=<longitude>` - Get 7-day weather forecast from Open-Meteo
+  - Query params `lat` and `lon` are optional (defaults to `FORECAST_LAT` and `FORECAST_LON` env vars)
+  - Open-Meteo is free and requires no API key
+  - Responses are cached in memory for 15 minutes
+
 ### Rachio
 - `GET /api/rachio/devices` - List all Rachio devices
 - `GET /api/rachio/zones?deviceId=<id>` - List zones for a device
@@ -158,6 +168,7 @@ Rules are evaluated every 5 minutes. Safety features:
 ## Dashboard
 
 The dashboard displays:
+- 7-day weather forecast with temperature trends (powered by Open-Meteo, no API key required)
 - Current temperature, humidity, and pressure
 - Rainfall statistics (last hour, 24h, 7d) with charts
 - Soil moisture current value and 24h trend

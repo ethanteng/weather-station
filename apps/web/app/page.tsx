@@ -7,6 +7,7 @@ import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { SoilMoistureChart } from '../components/SoilMoistureChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
+import { Forecast7Day } from '../components/Forecast7Day';
 import { RachioZone } from '../lib/api';
 
 export default function Dashboard() {
@@ -137,6 +138,9 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* 7-Day Forecast */}
+        <Forecast7Day />
 
         {/* Current Weather Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">

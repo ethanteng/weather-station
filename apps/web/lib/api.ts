@@ -146,6 +146,23 @@ export interface AutomationRule {
   updatedAt: string;
 }
 
+export interface DailyForecast {
+  date: string; // YYYY-MM-DD
+  tempMaxC: number;
+  tempMinC: number;
+  precipProbMax: number; // 0-100
+  precipSumMm: number;
+  windMaxKph?: number;
+}
+
+export interface Forecast7DayResponse {
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  generatedAt: string; // ISO
+  days: DailyForecast[]; // length 7
+}
+
 export const weatherApi = {
   async getLatest(): Promise<WeatherReading> {
     const response = await api.get<WeatherReading>('/api/weather/latest');
@@ -218,6 +235,22 @@ export const wateringApi = {
   async getEvents(limit = 10): Promise<WateringEvent[]> {
     const response = await api.get<WateringEvent[]>('/api/rachio/watering-events', {
       params: { limit },
+    });
+    return response.data;
+  },
+};
+
+export const forecastApi = {
+  async get7Day(lat?: number, lon?: number): Promise<Forecast7DayResponse> {
+    const params: Record<string, string> = {};
+    if (lat !== undefined) {
+      params.lat = lat.toString();
+    }
+    if (lon !== undefined) {
+      params.lon = lon.toString();
+    }
+    const response = await api.get<Forecast7DayResponse>('/api/forecast/7day', {
+      params,
     });
     return response.data;
   },
