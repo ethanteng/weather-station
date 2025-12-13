@@ -10,6 +10,7 @@ ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
+Environment=PORT=3000
 EnvironmentFile=/home/ethan/weather-station/.env
 
 [Install]

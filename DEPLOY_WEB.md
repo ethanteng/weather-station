@@ -61,11 +61,14 @@ ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
+Environment=PORT=3000
 EnvironmentFile=/home/ethan/weather-station/.env
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+**Important:** The `Environment=PORT=3000` line explicitly sets the port to 3000 for the web service, overriding any PORT value in the .env file (which is set to 3001 for the API).
 
 **Important:** Update the paths:
 - `User=ethan` → your username
