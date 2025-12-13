@@ -3,17 +3,51 @@
  * Run manually after first Rachio sync: npm run db:seed --workspace=apps/api
  */
 
-// Load environment variables from root .env file
+// Load environment variables from root .env file BEFORE importing PrismaClient
 import { config } from 'dotenv';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
 
-// Try to load .env from root directory (workspace root)
-// When running from apps/api, go up 2 levels; when from workspace root, use current dir
-const rootEnv = resolve(process.cwd(), '../../.env');
-const currentEnv = resolve(process.cwd(), '.env');
-config({ path: rootEnv });
-config({ path: currentEnv });
+// Try multiple possible locations for .env file
+// When running from workspace root with --workspace=apps/api, cwd is workspace root
+// When running from apps/api directory, cwd is apps/api
+const possibleEnvPaths = [
+  resolve(process.cwd(), '.env'), // Current directory (workspace root)
+  resolve(process.cwd(), '../../.env'), // From apps/api directory
+  resolve(process.cwd(), '../../../.env'), // From apps/api/src/scripts
+];
 
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+  if (existsSync(envPath)) {
+    const result = config({ path: envPath });
+    if (result.error) {
+      console.error(`Error loading .env from ${envPath}:`, result.error);
+    } else {
+      console.log(`Loaded .env from: ${envPath}`);
+      envLoaded = true;
+      break;
+    }
+  }
+}
+
+// Also try loading from default location (current working directory)
+if (!envLoaded) {
+  config();
+}
+
+// Verify DATABASE_URL is loaded
+if (!process.env.DATABASE_URL) {
+  console.error('ERROR: DATABASE_URL not found in environment variables');
+  console.error('Make sure .env file exists in the workspace root and contains DATABASE_URL');
+  console.error('Current working directory:', process.cwd());
+  console.error('Tried loading from:', possibleEnvPaths);
+  process.exit(1);
+}
+
+console.log('DATABASE_URL loaded successfully');
+
+// Now import PrismaClient after env vars are loaded
 import { PrismaClient } from '@prisma/client';
 import {
   RAIN_DELAY_THRESHOLD_INCHES,
