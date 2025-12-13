@@ -330,7 +330,30 @@ function RuleView({
   const isRachioSchedule = rule.source === 'rachio';
 
   // Formatting helper functions
-  const formatInterval = (interval?: number): string => {
+  const formatInterval = (interval?: number, scheduleJobTypes?: string[], summary?: string): string => {
+    // Use summary if available (e.g., "Every Wed at 9:05 AM")
+    if (summary) return summary;
+    
+    // Parse from scheduleJobTypes if available
+    if (scheduleJobTypes && scheduleJobTypes.length > 0) {
+      const jobType = scheduleJobTypes[0];
+      if (jobType.startsWith('INTERVAL_')) {
+        const days = parseInt(jobType.replace('INTERVAL_', ''), 10);
+        if (days === 1) return 'Every day';
+        if (days === 7) return 'Every week';
+        if (days === 14) return 'Every 14 days (2 weeks)';
+        if (days === 21) return 'Every 21 days (3 weeks)';
+        if (days === 30) return 'Every month';
+        return `Every ${days} days`;
+      }
+      if (jobType.startsWith('DAY_OF_WEEK_')) {
+        const dayNum = parseInt(jobType.replace('DAY_OF_WEEK_', ''), 10);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return `Every ${days[dayNum]}`;
+      }
+    }
+    
+    // Fall back to interval number
     if (!interval) return 'Not set';
     if (interval === 1) return 'Every day';
     if (interval < 7) return `Every ${interval} days`;
@@ -342,28 +365,54 @@ function RuleView({
     return `Every ${interval} days`;
   };
 
-  const formatStartTime = (startTime?: number): string => {
-    if (!startTime) return 'Not set';
-    // Handle seconds since midnight (0-86399)
-    if (startTime < 86400) {
-      const hours = Math.floor(startTime / 3600);
-      const minutes = Math.floor((startTime % 3600) / 60);
-      const period = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-      return `Start after ${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-    }
-    // Handle timestamp - convert to time
-    const date = new Date(startTime);
-    return `Start after ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
-  };
-
-  const formatDateRange = (startDate?: number, endDate?: number | null): { range: string; repeat: string } => {
-    if (!startDate) {
-      return { range: 'Not set', repeat: '' };
+  const formatStartTime = (startTime?: number, startHour?: number, startMinute?: number, operator?: string): string => {
+    // Use startHour and startMinute if available
+    if (startHour !== undefined && startMinute !== undefined) {
+      const period = startHour >= 12 ? 'PM' : 'AM';
+      const displayHours = startHour === 0 ? 12 : startHour > 12 ? startHour - 12 : startHour;
+      const op = operator === 'AFTER' ? 'after' : 'at';
+      return `Start ${op} ${displayHours}:${startMinute.toString().padStart(2, '0')} ${period}`;
     }
     
-    const start = new Date(startDate);
-    const startFormatted = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // Handle seconds since midnight (0-86399)
+    if (startTime !== undefined) {
+      if (startTime < 86400) {
+        const hours = Math.floor(startTime / 3600);
+        const minutes = Math.floor((startTime % 3600) / 60);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+        return `Start after ${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      }
+      // Handle timestamp - convert to time
+      const date = new Date(startTime);
+      return `Start after ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+    }
+    
+    return 'Not set';
+  };
+
+  const formatDateRange = (
+    startDate?: number, 
+    endDate?: number | null,
+    startDay?: number,
+    startMonth?: number,
+    startYear?: number,
+    scheduleJobTypes?: string[]
+  ): { range: string; repeat: string } => {
+    let startFormatted = 'Not set';
+    
+    // Use startDay/startMonth/startYear if available
+    if (startDay !== undefined && startMonth !== undefined && startYear !== undefined) {
+      const date = new Date(startYear, startMonth - 1, startDay);
+      startFormatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } else if (startDate) {
+      const start = new Date(startDate);
+      startFormatted = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    
+    if (startFormatted === 'Not set') {
+      return { range: 'Not set', repeat: '' };
+    }
     
     if (!endDate) {
       return { range: `${startFormatted} - Never`, repeat: 'Does not repeat' };
@@ -372,10 +421,23 @@ function RuleView({
     const end = new Date(endDate);
     const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     
-    // Determine repeat status from repeat config or interval
+    // Determine repeat status from scheduleJobTypes, repeat config, or interval
     let repeatText = 'Does not repeat';
-    const rachioRule = rule as AutomationRule & { repeat?: any; interval?: number };
-    if (rachioRule.repeat) {
+    const rachioRule = rule as AutomationRule & { repeat?: any; interval?: number; scheduleJobTypes?: string[] };
+    
+    if (scheduleJobTypes && scheduleJobTypes.length > 0) {
+      const jobType = scheduleJobTypes[0];
+      if (jobType.startsWith('INTERVAL_')) {
+        const days = parseInt(jobType.replace('INTERVAL_', ''), 10);
+        if (days === 1) repeatText = 'Repeats daily';
+        else if (days === 7) repeatText = 'Repeats weekly';
+        else repeatText = `Repeats every ${days} days`;
+      } else if (jobType.startsWith('DAY_OF_WEEK_')) {
+        const dayNum = parseInt(jobType.replace('DAY_OF_WEEK_', ''), 10);
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        repeatText = `Repeats every ${days[dayNum]}`;
+      }
+    } else if (rachioRule.repeat) {
       if (rachioRule.repeat.type === 'DAILY') repeatText = 'Repeats daily';
       else if (rachioRule.repeat.type === 'WEEKLY') repeatText = 'Repeats weekly';
       else if (rachioRule.repeat.type === 'MONTHLY') repeatText = 'Repeats monthly';
@@ -634,37 +696,86 @@ function RuleView({
           {isRachioSchedule && isExpanded && (
             <div className="mt-4 pt-4 border-t border-indigo-200">
               <div className="space-y-4">
+                {/* Summary (if available - shows formatted schedule description) */}
+                {isRachioSchedule && 'summary' in rule && rule.summary && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Schedule Summary</div>
+                      <div className="text-sm font-medium text-slate-900">{rule.summary}</div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Watering Interval */}
-                {isRachioSchedule && 'interval' in rule && rule.interval !== undefined && (
+                {isRachioSchedule && (('interval' in rule && rule.interval !== undefined) || ('scheduleJobTypes' in rule && rule.scheduleJobTypes)) && (
                   <div className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div className="flex-1">
                       <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Watering Interval</div>
-                      <div className="text-sm font-medium text-slate-900">{formatInterval(rule.interval)}</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {formatInterval(
+                          'interval' in rule ? rule.interval : undefined,
+                          'scheduleJobTypes' in rule ? rule.scheduleJobTypes : undefined,
+                          'summary' in rule ? rule.summary : undefined
+                        )}
+                      </div>
+                      {'scheduleJobTypes' in rule && rule.scheduleJobTypes && rule.scheduleJobTypes.length > 0 && (
+                        <div className="text-xs text-slate-500 mt-1">Type: {rule.scheduleJobTypes.join(', ')}</div>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {/* Start Time */}
-                {isRachioSchedule && 'startTime' in rule && rule.startTime !== undefined && (
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start Time</div>
-                      <div className="text-sm font-medium text-slate-900">{formatStartTime(rule.startTime)}</div>
+                {isRachioSchedule && (
+                  (('startTime' in rule && rule.startTime !== undefined) || 
+                   ('startHour' in rule && rule.startHour !== undefined)) && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start Time</div>
+                        <div className="text-sm font-medium text-slate-900">
+                          {formatStartTime(
+                            'startTime' in rule ? rule.startTime : undefined,
+                            'startHour' in rule ? rule.startHour : undefined,
+                            'startMinute' in rule ? rule.startMinute : undefined,
+                            'operator' in rule ? rule.operator : undefined
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )
                 )}
 
                 {/* Date Range */}
                 {isRachioSchedule && (
                   (() => {
-                    const rachioRule = rule as AutomationRule & { startDate?: number; endDate?: number | null };
-                    if (rachioRule.startDate !== undefined || rachioRule.endDate !== null) {
+                    const rachioRule = rule as AutomationRule & { 
+                      startDate?: number; 
+                      endDate?: number | null;
+                      startDay?: number;
+                      startMonth?: number;
+                      startYear?: number;
+                      scheduleJobTypes?: string[];
+                    };
+                    if (rachioRule.startDate !== undefined || 
+                        rachioRule.endDate !== null ||
+                        (rachioRule.startDay !== undefined && rachioRule.startMonth !== undefined && rachioRule.startYear !== undefined)) {
+                      const dateRange = formatDateRange(
+                        rachioRule.startDate,
+                        rachioRule.endDate,
+                        rachioRule.startDay,
+                        rachioRule.startMonth,
+                        rachioRule.startYear,
+                        rachioRule.scheduleJobTypes
+                      );
                       return (
                         <div className="flex items-start gap-3">
                           <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -672,9 +783,9 @@ function RuleView({
                           </svg>
                           <div className="flex-1">
                             <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start/End Dates</div>
-                            <div className="text-sm font-medium text-slate-900">{formatDateRange(rachioRule.startDate, rachioRule.endDate).range}</div>
-                            {formatDateRange(rachioRule.startDate, rachioRule.endDate).repeat && (
-                              <div className="text-xs text-slate-500 mt-1">{formatDateRange(rachioRule.startDate, rachioRule.endDate).repeat}</div>
+                            <div className="text-sm font-medium text-slate-900">{dateRange.range}</div>
+                            {dateRange.repeat && (
+                              <div className="text-xs text-slate-500 mt-1">{dateRange.repeat}</div>
                             )}
                           </div>
                         </div>
@@ -685,16 +796,83 @@ function RuleView({
                 )}
 
                 {/* Cycle and Soak */}
-                {isRachioSchedule && 'cycleSoak' in rule && rule.cycleSoak && (
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Cycle and Soak</div>
-                      <div className="text-sm font-medium text-slate-900">{rule.cycleSoak}</div>
+                {isRachioSchedule && (
+                  (('cycleSoak' in rule && rule.cycleSoak !== undefined) || 
+                   ('cycleSoakStatus' in rule && rule.cycleSoakStatus)) && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Cycle and Soak</div>
+                        <div className="space-y-1">
+                          {'cycleSoakStatus' in rule && rule.cycleSoakStatus && (
+                            <div className="text-sm font-medium text-slate-900">
+                              Status: <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                rule.cycleSoakStatus === 'ON'
+                                  ? 'bg-green-100 text-green-800 border border-green-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}>
+                                {rule.cycleSoakStatus}
+                              </span>
+                            </div>
+                          )}
+                          {'cycleSoak' in rule && rule.cycleSoak !== undefined && (
+                            <div className="text-xs text-slate-500">Enabled: {rule.cycleSoak ? 'Yes' : 'No'}</div>
+                          )}
+                          {'cycles' in rule && rule.cycles !== undefined && (
+                            <div className="text-xs text-slate-500">Cycles: {rule.cycles}</div>
+                          )}
+                          {'totalDurationNoCycle' in rule && rule.totalDurationNoCycle !== undefined && (
+                            <div className="text-xs text-slate-500">
+                              Duration without cycle: {Math.round(rule.totalDurationNoCycle / 60)} minutes
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )
+                )}
+
+                {/* Rain Delay and Water Budget */}
+                {isRachioSchedule && (
+                  (('rainDelay' in rule && rule.rainDelay !== undefined) || 
+                   ('waterBudget' in rule && rule.waterBudget !== undefined)) && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                      </svg>
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Weather Settings</div>
+                        <div className="space-y-1.5">
+                          {'rainDelay' in rule && rule.rainDelay !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-700 w-32">Rain Delay:</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                rule.rainDelay
+                                  ? 'bg-green-100 text-green-800 border border-green-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}>
+                                {rule.rainDelay ? 'On' : 'Off'}
+                              </span>
+                            </div>
+                          )}
+                          {'waterBudget' in rule && rule.waterBudget !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-700 w-32">Water Budget:</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                rule.waterBudget
+                                  ? 'bg-green-100 text-green-800 border border-green-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}>
+                                {rule.waterBudget ? 'On' : 'Off'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
                 )}
 
                 {/* Weather Intelligence */}
@@ -706,9 +884,15 @@ function RuleView({
                     <div className="flex-1">
                       <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Weather Intelligence</div>
                       <div className="space-y-1.5">
+                        {'weatherIntelligenceSensitivity' in rule && rule.weatherIntelligenceSensitivity !== undefined && (
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm text-slate-700 w-40">Sensitivity:</span>
+                            <span className="text-sm font-medium text-slate-900">{(rule.weatherIntelligenceSensitivity * 100).toFixed(0)}%</span>
+                          </div>
+                        )}
                         {rule.weatherIntelligence.rainSkip !== undefined && (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-700 w-24">Rain Skip:</span>
+                            <span className="text-sm text-slate-700 w-32">Rain Skip:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               rule.weatherIntelligence.rainSkip
                                 ? 'bg-green-100 text-green-800 border border-green-200'
@@ -720,7 +904,7 @@ function RuleView({
                         )}
                         {rule.weatherIntelligence.freezeSkip !== undefined && (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-700 w-24">Freeze Skip:</span>
+                            <span className="text-sm text-slate-700 w-32">Freeze Skip:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               rule.weatherIntelligence.freezeSkip
                                 ? 'bg-green-100 text-green-800 border border-green-200'
@@ -732,7 +916,7 @@ function RuleView({
                         )}
                         {rule.weatherIntelligence.windSkip !== undefined && (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-700 w-24">Wind Skip:</span>
+                            <span className="text-sm text-slate-700 w-32">Wind Skip:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               rule.weatherIntelligence.windSkip
                                 ? 'bg-green-100 text-green-800 border border-green-200'
@@ -744,7 +928,7 @@ function RuleView({
                         )}
                         {rule.weatherIntelligence.saturationSkip !== undefined && (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-700 w-24">Saturation Skip:</span>
+                            <span className="text-sm text-slate-700 w-32">Saturation Skip:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               rule.weatherIntelligence.saturationSkip
                                 ? 'bg-green-100 text-green-800 border border-green-200'
@@ -756,7 +940,7 @@ function RuleView({
                         )}
                         {rule.weatherIntelligence.seasonalShift !== undefined && (
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-700 w-24">Seasonal Shift:</span>
+                            <span className="text-sm text-slate-700 w-32">Seasonal Shift:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               rule.weatherIntelligence.seasonalShift
                                 ? 'bg-green-100 text-green-800 border border-green-200'
@@ -766,6 +950,33 @@ function RuleView({
                             </span>
                           </div>
                         )}
+                        {rule.weatherIntelligence.etSkip !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-700 w-32">ET Skip:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              rule.weatherIntelligence.etSkip
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              {rule.weatherIntelligence.etSkip ? 'On' : 'Off'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Seasonal Adjustment */}
+                {isRachioSchedule && 'seasonalAdjustment' in rule && rule.seasonalAdjustment !== undefined && (
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Seasonal Adjustment</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {rule.seasonalAdjustment > 0 ? '+' : ''}{rule.seasonalAdjustment}%
                       </div>
                     </div>
                   </div>

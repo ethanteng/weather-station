@@ -126,6 +126,7 @@ export interface WateringEvent {
 
 export interface RachioScheduleZone {
   zoneId: string;
+  zoneNumber?: number;
   duration: number;
   sortOrder: number;
 }
@@ -136,6 +137,8 @@ export interface RachioWeatherIntelligence {
   windSkip?: boolean;
   saturationSkip?: boolean;
   seasonalShift?: boolean;
+  etSkip?: boolean; // Evapotranspiration skip
+  weatherIntelligenceSensitivity?: number;
 }
 
 export interface RachioSchedule {
@@ -146,13 +149,33 @@ export interface RachioSchedule {
   startDate?: number;
   totalDuration?: number;
   deviceId: string;
+  // Schedule timing
+  scheduleJobTypes?: string[]; // e.g., ["INTERVAL_14", "DAY_OF_WEEK_3"]
+  summary?: string; // e.g., "Every Wed at 9:05 AM"
+  startHour?: number;
+  startMinute?: number;
+  operator?: string; // e.g., "AFTER"
+  startDay?: number;
+  startMonth?: number;
+  startYear?: number;
   interval?: number; // Days between waterings
   startTime?: number; // Start time (seconds since midnight or timestamp)
   endDate?: number | null; // End date timestamp
-  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  // Cycle and soak
+  cycleSoak?: boolean;
+  cycleSoakStatus?: string; // "ON" or "OFF"
+  cycles?: number;
+  totalDurationNoCycle?: number;
+  // Weather intelligence
+  rainDelay?: boolean;
+  waterBudget?: boolean;
   weatherIntelligence?: RachioWeatherIntelligence;
+  weatherIntelligenceSensitivity?: number;
+  seasonalAdjustment?: number;
+  // Other fields
   color?: string | null; // Hex color code
   repeat?: any; // Repeat configuration object
+  externalName?: string; // External name for the schedule
 }
 
 export interface AutomationRule {
@@ -181,14 +204,30 @@ export interface AutomationRule {
   deviceName?: string; // For Rachio schedules
   scheduleZones?: RachioScheduleZone[]; // Original zone data with durations for Rachio schedules
   // Additional Rachio schedule fields
+  scheduleJobTypes?: string[]; // e.g., ["INTERVAL_14", "DAY_OF_WEEK_3"]
+  summary?: string; // e.g., "Every Wed at 9:05 AM"
+  startHour?: number;
+  startMinute?: number;
+  operator?: string; // e.g., "AFTER"
+  startDay?: number;
+  startMonth?: number;
+  startYear?: number;
   interval?: number; // Days between waterings
   startTime?: number; // Start time (seconds since midnight or timestamp)
   startDate?: number; // Start date timestamp (for Rachio schedules)
   endDate?: number | null; // End date timestamp
-  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  cycleSoak?: boolean;
+  cycleSoakStatus?: string; // "ON" or "OFF"
+  cycles?: number;
+  totalDurationNoCycle?: number;
+  rainDelay?: boolean;
+  waterBudget?: boolean;
   weatherIntelligence?: RachioWeatherIntelligence;
+  weatherIntelligenceSensitivity?: number;
+  seasonalAdjustment?: number;
   color?: string | null; // Hex color code
   repeat?: any; // Repeat configuration object
+  externalName?: string; // External name for the schedule
 }
 
 export interface DailyForecast {

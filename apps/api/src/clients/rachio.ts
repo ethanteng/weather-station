@@ -34,6 +34,7 @@ export interface RachioRainDelay {
 
 export interface RachioScheduleZone {
   zoneId: string;
+  zoneNumber?: number;
   duration: number;
   sortOrder: number;
 }
@@ -44,6 +45,8 @@ export interface RachioWeatherIntelligence {
   windSkip?: boolean;
   saturationSkip?: boolean;
   seasonalShift?: boolean;
+  etSkip?: boolean; // Evapotranspiration skip
+  weatherIntelligenceSensitivity?: number;
 }
 
 export interface RachioSchedule {
@@ -54,13 +57,33 @@ export interface RachioSchedule {
   startDate?: number;
   totalDuration?: number;
   deviceId: string;
-  interval?: number; // Days between waterings
+  // Schedule timing
+  scheduleJobTypes?: string[]; // e.g., ["INTERVAL_14", "DAY_OF_WEEK_3"]
+  summary?: string; // e.g., "Every Wed at 9:05 AM"
+  startHour?: number;
+  startMinute?: number;
+  operator?: string; // e.g., "AFTER"
+  startDay?: number;
+  startMonth?: number;
+  startYear?: number;
+  interval?: number; // Days between waterings (derived from scheduleJobTypes)
   startTime?: number; // Start time (seconds since midnight or timestamp)
   endDate?: number | null; // End date timestamp
-  cycleSoak?: string | null; // e.g., "Smart Cycle"
+  // Cycle and soak
+  cycleSoak?: boolean;
+  cycleSoakStatus?: string; // "ON" or "OFF"
+  cycles?: number;
+  totalDurationNoCycle?: number;
+  // Weather intelligence
+  rainDelay?: boolean;
+  waterBudget?: boolean;
   weatherIntelligence?: RachioWeatherIntelligence;
+  weatherIntelligenceSensitivity?: number;
+  seasonalAdjustment?: number;
+  // Other fields
   color?: string | null; // Hex color code
   repeat?: any; // Repeat configuration object
+  externalName?: string; // External name for the schedule
   [key: string]: unknown;
 }
 
@@ -210,22 +233,66 @@ export class RachioClient {
         if (schedule.windSkip !== undefined) weatherIntelligence.windSkip = schedule.windSkip === true;
         if (schedule.saturationSkip !== undefined) weatherIntelligence.saturationSkip = schedule.saturationSkip === true;
         if (schedule.seasonalShift !== undefined) weatherIntelligence.seasonalShift = schedule.seasonalShift === true;
+        if (schedule.etSkip !== undefined) weatherIntelligence.etSkip = schedule.etSkip === true;
+        if (schedule.weatherIntelligenceSensitivity !== undefined) {
+          weatherIntelligence.weatherIntelligenceSensitivity = schedule.weatherIntelligenceSensitivity;
+        }
+
+        // Extract interval from scheduleJobTypes if present (e.g., "INTERVAL_14" -> 14)
+        let interval: number | undefined = schedule.interval || schedule.frequency;
+        if (!interval && schedule.scheduleJobTypes && schedule.scheduleJobTypes.length > 0) {
+          const intervalMatch = schedule.scheduleJobTypes[0].match(/INTERVAL_(\d+)/);
+          if (intervalMatch) {
+            interval = parseInt(intervalMatch[1], 10);
+          }
+        }
+
+        // Calculate start time from startHour and startMinute if available
+        let startTime: number | undefined = schedule.startTime || schedule.startTimeOfDay;
+        if (!startTime && schedule.startHour !== undefined && schedule.startMinute !== undefined) {
+          startTime = schedule.startHour * 3600 + schedule.startMinute * 60;
+        }
 
         return {
           id: schedule.id,
-          name: schedule.name || 'Unnamed Schedule',
+          name: schedule.name || schedule.externalName || 'Unnamed Schedule',
           enabled: schedule.enabled !== false,
-          zones: schedule.zones || [],
+          zones: (schedule.zones || []).map((z: any) => ({
+            zoneId: z.zoneId,
+            zoneNumber: z.zoneNumber,
+            duration: z.duration,
+            sortOrder: z.sortOrder,
+          })),
           startDate: schedule.startDate,
           totalDuration: schedule.totalDuration,
           deviceId: deviceId,
-          interval: schedule.interval || schedule.frequency || undefined,
-          startTime: schedule.startTime || schedule.startTimeOfDay || undefined,
+          // Schedule timing
+          scheduleJobTypes: schedule.scheduleJobTypes,
+          summary: schedule.summary,
+          startHour: schedule.startHour,
+          startMinute: schedule.startMinute,
+          operator: schedule.operator,
+          startDay: schedule.startDay,
+          startMonth: schedule.startMonth,
+          startYear: schedule.startYear,
+          interval,
+          startTime,
           endDate: schedule.endDate || schedule.endDateTimestamp || null,
-          cycleSoak: schedule.cycleSoak || schedule.smartCycle || schedule.cycleAndSoak || null,
+          // Cycle and soak
+          cycleSoak: schedule.cycleSoak === true,
+          cycleSoakStatus: schedule.cycleSoakStatus,
+          cycles: schedule.cycles,
+          totalDurationNoCycle: schedule.totalDurationNoCycle,
+          // Weather intelligence
+          rainDelay: schedule.rainDelay === true,
+          waterBudget: schedule.waterBudget === true,
           weatherIntelligence: Object.keys(weatherIntelligence).length > 0 ? weatherIntelligence : undefined,
+          weatherIntelligenceSensitivity: schedule.weatherIntelligenceSensitivity,
+          seasonalAdjustment: schedule.seasonalAdjustment,
+          // Other fields
           color: schedule.color || schedule.scheduleColor || null,
           repeat: schedule.repeat || schedule.repeatConfig || undefined,
+          externalName: schedule.externalName,
         };
       });
     } catch (error) {

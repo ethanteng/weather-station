@@ -51,14 +51,30 @@ router.get('/', async (_req: Request, res: Response) => {
               deviceName: device.name,
               scheduleZones: schedule.zones, // Keep original zone data with durations
               // Pass through additional Rachio schedule fields
+              scheduleJobTypes: schedule.scheduleJobTypes,
+              summary: schedule.summary,
+              startHour: schedule.startHour,
+              startMinute: schedule.startMinute,
+              operator: schedule.operator,
+              startDay: schedule.startDay,
+              startMonth: schedule.startMonth,
+              startYear: schedule.startYear,
               interval: schedule.interval,
               startTime: schedule.startTime,
               startDate: schedule.startDate,
               endDate: schedule.endDate,
               cycleSoak: schedule.cycleSoak,
+              cycleSoakStatus: schedule.cycleSoakStatus,
+              cycles: schedule.cycles,
+              totalDurationNoCycle: schedule.totalDurationNoCycle,
+              rainDelay: schedule.rainDelay,
+              waterBudget: schedule.waterBudget,
               weatherIntelligence: schedule.weatherIntelligence,
+              weatherIntelligenceSensitivity: schedule.weatherIntelligenceSensitivity,
+              seasonalAdjustment: schedule.seasonalAdjustment,
               color: schedule.color,
               repeat: schedule.repeat,
+              externalName: schedule.externalName,
             }));
             rachioSchedules.push(...transformedSchedules);
           } catch (error) {
