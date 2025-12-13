@@ -151,30 +151,5 @@ export class EcowittClient {
     return parsed;
   }
 
-  /**
-   * Retry wrapper for API calls
-   * Currently unused but available for future use
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private async retry<T>(
-    fn: () => Promise<T>,
-    maxRetries = 3,
-    delayMs = 1000
-  ): Promise<T> {
-    let lastError: Error | null = null;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unknown error');
-        if (i < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs * (i + 1)));
-        }
-      }
-    }
-
-    throw lastError || new Error('Retry failed');
-  }
 }
 

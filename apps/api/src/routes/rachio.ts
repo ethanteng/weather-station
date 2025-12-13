@@ -194,7 +194,7 @@ router.post('/stop', async (req: Request, res: Response) => {
  */
 router.get('/watering-events', async (_req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = parseInt(_req.query.limit as string) || 10;
 
     const events = await prisma.wateringEvent.findMany({
       take: limit,
