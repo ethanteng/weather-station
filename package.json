@@ -12,6 +12,7 @@
     "build": "npm run build --workspaces",
     "deploy:api": "npm run build --workspace=apps/api && sudo systemctl restart weather-station-api && sudo journalctl -u weather-station-api -f",
     "deploy:web": "npm run build --workspace=apps/web && sudo systemctl restart weather-station-web && sudo journalctl -u weather-station-web -f",
+    "status": "sudo systemctl status weather-station-api weather-station-web",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
     "db:studio": "npm run db:studio --workspace=apps/api"
