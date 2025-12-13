@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Weather → Irrigation Control',
+  title: 'Home Weather Station',
   description: 'Automated irrigation control based on weather data',
 }
 
