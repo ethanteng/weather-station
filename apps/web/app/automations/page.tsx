@@ -374,15 +374,16 @@ function RuleView({
     
     // Determine repeat status from repeat config or interval
     let repeatText = 'Does not repeat';
-    if (rule.repeat) {
-      if (rule.repeat.type === 'DAILY') repeatText = 'Repeats daily';
-      else if (rule.repeat.type === 'WEEKLY') repeatText = 'Repeats weekly';
-      else if (rule.repeat.type === 'MONTHLY') repeatText = 'Repeats monthly';
-      else if (rule.interval && rule.interval > 0) {
-        repeatText = `Repeats every ${rule.interval} days`;
+    const rachioRule = rule as AutomationRule & { repeat?: any; interval?: number };
+    if (rachioRule.repeat) {
+      if (rachioRule.repeat.type === 'DAILY') repeatText = 'Repeats daily';
+      else if (rachioRule.repeat.type === 'WEEKLY') repeatText = 'Repeats weekly';
+      else if (rachioRule.repeat.type === 'MONTHLY') repeatText = 'Repeats monthly';
+      else if (rachioRule.interval && rachioRule.interval > 0) {
+        repeatText = `Repeats every ${rachioRule.interval} days`;
       }
-    } else if (rule.interval && rule.interval > 0) {
-      repeatText = `Repeats every ${rule.interval} days`;
+    } else if (rachioRule.interval && rachioRule.interval > 0) {
+      repeatText = `Repeats every ${rachioRule.interval} days`;
     }
     
     return { range: `${startFormatted} - ${endFormatted}`, repeat: repeatText };
@@ -554,7 +555,7 @@ function RuleView({
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
                     📅 Rachio Schedule
                   </span>
-                  {rule.color && (
+                  {'color' in rule && rule.color && (
                     <span
                       className="inline-block w-6 h-6 rounded border-2 border-slate-300"
                       style={{ backgroundColor: rule.color }}
@@ -634,7 +635,7 @@ function RuleView({
             <div className="mt-4 pt-4 border-t border-indigo-200">
               <div className="space-y-4">
                 {/* Watering Interval */}
-                {rule.interval !== undefined && (
+                {isRachioSchedule && 'interval' in rule && rule.interval !== undefined && (
                   <div className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -647,7 +648,7 @@ function RuleView({
                 )}
 
                 {/* Start Time */}
-                {rule.startTime !== undefined && (
+                {isRachioSchedule && 'startTime' in rule && rule.startTime !== undefined && (
                   <div className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -660,23 +661,31 @@ function RuleView({
                 )}
 
                 {/* Date Range */}
-                {(rule.startDate !== undefined || rule.endDate !== null) && (
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start/End Dates</div>
-                      <div className="text-sm font-medium text-slate-900">{formatDateRange(rule.startDate, rule.endDate).range}</div>
-                      {formatDateRange(rule.startDate, rule.endDate).repeat && (
-                        <div className="text-xs text-slate-500 mt-1">{formatDateRange(rule.startDate, rule.endDate).repeat}</div>
-                      )}
-                    </div>
-                  </div>
+                {isRachioSchedule && (
+                  (() => {
+                    const rachioRule = rule as AutomationRule & { startDate?: number; endDate?: number | null };
+                    if (rachioRule.startDate !== undefined || rachioRule.endDate !== null) {
+                      return (
+                        <div className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <div className="flex-1">
+                            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start/End Dates</div>
+                            <div className="text-sm font-medium text-slate-900">{formatDateRange(rachioRule.startDate, rachioRule.endDate).range}</div>
+                            {formatDateRange(rachioRule.startDate, rachioRule.endDate).repeat && (
+                              <div className="text-xs text-slate-500 mt-1">{formatDateRange(rachioRule.startDate, rachioRule.endDate).repeat}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()
                 )}
 
                 {/* Cycle and Soak */}
-                {rule.cycleSoak && (
+                {isRachioSchedule && 'cycleSoak' in rule && rule.cycleSoak && (
                   <div className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -689,7 +698,7 @@ function RuleView({
                 )}
 
                 {/* Weather Intelligence */}
-                {rule.weatherIntelligence && (
+                {isRachioSchedule && 'weatherIntelligence' in rule && rule.weatherIntelligence && (
                   <div className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />

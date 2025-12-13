@@ -183,6 +183,7 @@ export interface AutomationRule {
   // Additional Rachio schedule fields
   interval?: number; // Days between waterings
   startTime?: number; // Start time (seconds since midnight or timestamp)
+  startDate?: number; // Start date timestamp (for Rachio schedules)
   endDate?: number | null; // End date timestamp
   cycleSoak?: string | null; // e.g., "Smart Cycle"
   weatherIntelligence?: RachioWeatherIntelligence;
