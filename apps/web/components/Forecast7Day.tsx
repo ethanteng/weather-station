@@ -100,16 +100,58 @@ export function Forecast7Day() {
             const tempMaxF = celsiusToFahrenheit(day.tempMaxC);
             const tempMinF = celsiusToFahrenheit(day.tempMinC);
             const precipInches = mmToInches(day.precipSumMm);
+            const precipProb = day.precipProbMax;
+            const hasSignificantRain = precipProb >= 30 || precipInches > 0.01;
+            const hasHeavyRain = precipProb >= 50 || precipInches > 0.1;
+
+            // Determine background color based on precipitation
+            const getBackgroundColor = () => {
+              if (hasHeavyRain) {
+                return 'bg-gradient-to-br from-blue-100 to-blue-200 border-blue-400';
+              } else if (hasSignificantRain) {
+                return 'bg-blue-50 border-blue-300';
+              }
+              return 'bg-slate-50 border-slate-200';
+            };
+
+            // Determine precipitation text color
+            const getPrecipColor = () => {
+              if (hasHeavyRain) {
+                return 'text-blue-900 font-bold';
+              } else if (hasSignificantRain) {
+                return 'text-blue-800 font-semibold';
+              }
+              return 'text-blue-600';
+            };
 
             return (
               <div
                 key={index}
-                className="bg-slate-50 rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow"
+                className={`${getBackgroundColor()} rounded-lg border-2 p-4 hover:shadow-md transition-all ${
+                  hasHeavyRain ? 'shadow-sm' : ''
+                }`}
               >
                 <div className="text-center">
                   {/* Day and Date */}
                   <div className="mb-3">
-                    <div className="font-semibold text-slate-900 text-sm">{dayName}</div>
+                    <div className="font-semibold text-slate-900 text-sm flex items-center justify-center gap-1">
+                      {hasSignificantRain && (
+                        <svg
+                          className="w-4 h-4 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                          />
+                        </svg>
+                      )}
+                      {dayName}
+                    </div>
                     <div className="text-xs text-slate-600">{date}</div>
                   </div>
 
@@ -125,17 +167,70 @@ export function Forecast7Day() {
 
                   {/* Precipitation Probability */}
                   <div className="mb-2">
-                    <div className="text-xs text-slate-600 mb-1">Precip</div>
-                    <div className="text-sm font-semibold text-blue-700">
-                      {day.precipProbMax}%
+                    <div className="text-xs text-slate-600 mb-1 flex items-center justify-center gap-1">
+                      {hasSignificantRain && (
+                        <svg
+                          className={`w-4 h-4 ${hasHeavyRain ? 'text-blue-800' : 'text-blue-600'}`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                        </svg>
+                      )}
+                      Precip
+                    </div>
+                    <div className={`text-base ${getPrecipColor()} flex items-center justify-center gap-1`}>
+                      {hasSignificantRain && (
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                        </svg>
+                      )}
+                      {precipProb}%
+                      {hasHeavyRain && (
+                        <span className="ml-1 text-xs" title="Heavy rain expected">🌧️</span>
+                      )}
                     </div>
                   </div>
 
                   {/* Precipitation Amount */}
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">Amount</div>
-                    <div className="text-sm font-semibold text-blue-700">
-                      {precipInches.toFixed(2)} in
+                    <div className="text-xs text-slate-600 mb-1 flex items-center justify-center gap-1">
+                      {precipInches > 0.01 && (
+                        <svg
+                          className="w-3 h-3 text-blue-600"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                      Amount
+                    </div>
+                    <div className={`text-sm ${getPrecipColor()} flex items-center justify-center gap-1`}>
+                      {precipInches > 0.01 && (
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                      <span className={precipInches > 0.1 ? 'font-bold' : ''}>
+                        {precipInches.toFixed(2)} in
+                      </span>
                     </div>
                   </div>
                 </div>
