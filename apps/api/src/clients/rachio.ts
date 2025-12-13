@@ -202,29 +202,32 @@ export class RachioClient {
       const response = await this.client.get(`/device/${deviceId}`);
       const scheduleRules = response.data?.scheduleRules || [];
       
-      return scheduleRules.map((schedule: any) => ({
-        id: schedule.id,
-        name: schedule.name || 'Unnamed Schedule',
-        enabled: schedule.enabled !== false,
-        zones: schedule.zones || [],
-        startDate: schedule.startDate,
-        totalDuration: schedule.totalDuration,
-        deviceId: deviceId,
-        interval: schedule.interval || schedule.frequency || undefined,
-        startTime: schedule.startTime || schedule.startTimeOfDay || undefined,
-        endDate: schedule.endDate || schedule.endDateTimestamp || null,
-        cycleSoak: schedule.cycleSoak || schedule.smartCycle || schedule.cycleAndSoak || null,
-        weatherIntelligence: {
-          rainSkip: schedule.rainSkip !== false && schedule.rainSkip !== undefined ? schedule.rainSkip : undefined,
-          freezeSkip: schedule.freezeSkip !== false && schedule.freezeSkip !== undefined ? schedule.freezeSkip : undefined,
-          windSkip: schedule.windSkip !== false && schedule.windSkip !== undefined ? schedule.windSkip : undefined,
-          saturationSkip: schedule.saturationSkip !== false && schedule.saturationSkip !== undefined ? schedule.saturationSkip : undefined,
-          seasonalShift: schedule.seasonalShift !== false && schedule.seasonalShift !== undefined ? schedule.seasonalShift : undefined,
-        },
-        color: schedule.color || schedule.scheduleColor || null,
-        repeat: schedule.repeat || schedule.repeatConfig || undefined,
-        ...schedule, // Include all other fields from the API response
-      }));
+      return scheduleRules.map((schedule: any) => {
+        // Extract weather intelligence fields
+        const weatherIntelligence: RachioWeatherIntelligence = {};
+        if (schedule.rainSkip !== undefined) weatherIntelligence.rainSkip = schedule.rainSkip === true;
+        if (schedule.freezeSkip !== undefined) weatherIntelligence.freezeSkip = schedule.freezeSkip === true;
+        if (schedule.windSkip !== undefined) weatherIntelligence.windSkip = schedule.windSkip === true;
+        if (schedule.saturationSkip !== undefined) weatherIntelligence.saturationSkip = schedule.saturationSkip === true;
+        if (schedule.seasonalShift !== undefined) weatherIntelligence.seasonalShift = schedule.seasonalShift === true;
+
+        return {
+          id: schedule.id,
+          name: schedule.name || 'Unnamed Schedule',
+          enabled: schedule.enabled !== false,
+          zones: schedule.zones || [],
+          startDate: schedule.startDate,
+          totalDuration: schedule.totalDuration,
+          deviceId: deviceId,
+          interval: schedule.interval || schedule.frequency || undefined,
+          startTime: schedule.startTime || schedule.startTimeOfDay || undefined,
+          endDate: schedule.endDate || schedule.endDateTimestamp || null,
+          cycleSoak: schedule.cycleSoak || schedule.smartCycle || schedule.cycleAndSoak || null,
+          weatherIntelligence: Object.keys(weatherIntelligence).length > 0 ? weatherIntelligence : undefined,
+          color: schedule.color || schedule.scheduleColor || null,
+          repeat: schedule.repeat || schedule.repeatConfig || undefined,
+        };
+      });
     } catch (error) {
       console.error(`Error fetching schedules for device ${deviceId}:`, error);
       throw new Error(`Failed to fetch schedules: ${error instanceof Error ? error.message : 'Unknown error'}`);
