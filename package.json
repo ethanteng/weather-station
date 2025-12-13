@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=apps/api & npm run dev --workspace=apps/web",
+    "dev:web": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspaces",
+    "deploy:api": "npm run build --workspace=apps/api && sudo systemctl restart weather-station-api && sudo journalctl -u weather-station-api -f",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
     "db:studio": "npm run db:studio --workspace=apps/api"
