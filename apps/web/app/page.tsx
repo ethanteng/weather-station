@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { weatherApi, rachioApi, automationApi, wateringApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent } from '../lib/api';
+import { weatherApi, rachioApi, automationApi, wateringApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { SoilMoistureChart } from '../components/SoilMoistureChart';
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [weather7d, setWeather7d] = useState<WeatherSummary | null>(null);
   const [devices, setDevices] = useState<RachioDevice[]>([]);
   const [wateringEvents, setWateringEvents] = useState<WateringEvent[]>([]);
-  const [automations, setAutomations] = useState<any[]>([]);
+  const [automations, setAutomations] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
@@ -260,36 +260,136 @@ export default function Dashboard() {
           </div>
           <div className="p-6">
             {automations.length > 0 ? (
-              <div className="space-y-3">
-                {automations.map((rule) => (
-                  <div
-                    key={rule.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                          rule.enabled
-                            ? 'bg-green-100 text-green-800 border border-green-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {rule.enabled ? (
-                          <>
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                            Enabled
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
-                            Disabled
-                          </>
-                        )}
-                      </span>
-                      <span className="font-semibold text-slate-900">{rule.name}</span>
+              <div className="space-y-6">
+                {/* Custom Rules Section */}
+                {automations.filter(r => r.source !== 'rachio').length > 0 && (
+                  <div>
+                    <div className="mb-3">
+                      <h3 className="text-lg font-semibold text-slate-800">Custom Automation Rules</h3>
+                      <p className="text-xs text-slate-500 mt-1">Rules configured in this app</p>
+                    </div>
+                    <div className="space-y-2">
+                      {automations
+                        .filter(r => r.source !== 'rachio')
+                        .map((rule) => (
+                          <div
+                            key={rule.id}
+                            className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                  rule.enabled
+                                    ? 'bg-green-100 text-green-800 border border-green-200'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {rule.enabled ? (
+                                  <>
+                                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                                    Enabled
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
+                                    Disabled
+                                  </>
+                                )}
+                              </span>
+                              <span className="font-semibold text-slate-900">{rule.name}</span>
+                            </div>
+                          </div>
+                        ))}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Rachio Schedules Section */}
+                {automations.filter(r => r.source === 'rachio').length > 0 && (
+                  <div>
+                    <div className="mb-3">
+                      <h3 className="text-lg font-semibold text-slate-800">Rachio Schedules</h3>
+                      <p className="text-xs text-slate-500 mt-1">Schedules configured in the Rachio app</p>
+                    </div>
+                    {(() => {
+                      // Group Rachio schedules by device name
+                      const rachioRules = automations.filter(r => r.source === 'rachio');
+                      const groupedByDevice = rachioRules.reduce((acc, rule) => {
+                        const deviceName = rule.deviceName || 'Unknown Device';
+                        if (!acc[deviceName]) {
+                          acc[deviceName] = [];
+                        }
+                        acc[deviceName].push(rule);
+                        return acc;
+                      }, {} as Record<string, AutomationRule[]>);
+
+                      // Sort device names (frontyard/backyard first if they exist)
+                      const deviceNames = Object.keys(groupedByDevice).sort((a, b) => {
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        if (aLower.includes('front') && !bLower.includes('front')) return -1;
+                        if (!aLower.includes('front') && bLower.includes('front')) return 1;
+                        if (aLower.includes('back') && !bLower.includes('back')) return -1;
+                        if (!aLower.includes('back') && bLower.includes('back')) return 1;
+                        return a.localeCompare(b);
+                      });
+
+                      return (
+                        <div className="space-y-4">
+                          {deviceNames.map((deviceName) => (
+                            <div key={deviceName}>
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                  </svg>
+                                  {deviceName}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  ({groupedByDevice[deviceName].length} schedule{groupedByDevice[deviceName].length !== 1 ? 's' : ''})
+                                </span>
+                              </div>
+                              <div className="space-y-2 ml-2">
+                                {groupedByDevice[deviceName].map((rule) => (
+                                  <div
+                                    key={rule.id}
+                                    className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-lg border border-indigo-100 hover:bg-indigo-50 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <span
+                                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                          rule.enabled
+                                            ? 'bg-green-100 text-green-800 border border-green-200'
+                                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                        }`}
+                                      >
+                                        {rule.enabled ? (
+                                          <>
+                                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                                            Enabled
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
+                                            Disabled
+                                          </>
+                                        )}
+                                      </span>
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                        📅 Rachio
+                                      </span>
+                                      <span className="font-semibold text-slate-900">{rule.name}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8">
