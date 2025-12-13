@@ -221,7 +221,15 @@ This builds both the API and web applications.
 
 ### Using systemd
 
+#### 1. API Service
+
 1. Create a systemd service file for the API:
+
+```bash
+sudo nano /etc/systemd/system/weather-station-api.service
+```
+
+Add the following (adjust paths and user as needed):
 
 ```ini
 [Unit]
@@ -230,12 +238,13 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=your-user
-WorkingDirectory=/path/to/weather-station/apps/api
+User=ethan
+WorkingDirectory=/home/ethan/weather-station/apps/api
 ExecStart=/usr/bin/npm start
 Restart=always
+RestartSec=10
 Environment=NODE_ENV=production
-EnvironmentFile=/path/to/.env
+EnvironmentFile=/home/ethan/weather-station/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -244,13 +253,86 @@ WantedBy=multi-user.target
 2. Enable and start the service:
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable weather-station-api
 sudo systemctl start weather-station-api
+sudo systemctl status weather-station-api
 ```
+
+#### 2. Web Frontend Service
+
+1. Build the frontend for production:
+
+```bash
+cd /home/ethan/weather-station
+npm run build --workspace=apps/web
+```
+
+2. Create a systemd service file for the web frontend:
+
+```bash
+sudo nano /etc/systemd/system/weather-station-web.service
+```
+
+Add the following (adjust paths and user as needed):
+
+```ini
+[Unit]
+Description=Weather Station Web Dashboard
+After=network.target weather-station-api.service
+
+[Service]
+Type=simple
+User=ethan
+WorkingDirectory=/home/ethan/weather-station/apps/web
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+EnvironmentFile=/home/ethan/weather-station/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable weather-station-web
+sudo systemctl start weather-station-web
+sudo systemctl status weather-station-web
+```
+
+4. Update your `.env` file to set the correct API URL:
+
+```bash
+# In .env file, set:
+NEXT_PUBLIC_API_URL=http://localhost:3001
+# Or if accessing from another machine:
+NEXT_PUBLIC_API_URL=http://192.168.6.15:3001
+```
+
+#### 3. Quick Deploy Scripts
+
+From the project root, you can use these npm scripts:
+
+```bash
+# Deploy API (build + restart + follow logs)
+npm run deploy:api
+
+# Deploy Web (build + restart + follow logs)
+npm run deploy:web
+```
+
+#### 4. Access the Dashboard
+
+- API: `http://your-server-ip:3001`
+- Dashboard: `http://your-server-ip:3000`
 
 ### Using Docker Compose
 
-You can extend `docker-compose.yml` to include the API service for full containerization.
+You can extend `docker-compose.yml` to include the API and web services for full containerization.
 
 ## Phase 2: Cloud Deployment
 
