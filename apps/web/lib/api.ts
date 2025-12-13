@@ -8,7 +8,7 @@ function getApiUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL;
   }
   
-  // Otherwise, detect based on current hostname
+  // Otherwise, detect based on current hostname (client-side only)
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     // If accessing via localhost, use localhost for API
@@ -23,8 +23,6 @@ function getApiUrl(): string {
   return 'http://localhost:3001';
 }
 
-const API_URL = getApiUrl();
-
 // Note: In a real app, you'd handle auth differently
 // For Phase 1, we'll use a simple approach
 let authToken: string | null = null;
@@ -34,15 +32,22 @@ export function setAuthToken(token: string): void {
 }
 
 function createClient(): AxiosInstance {
+  // Start with a default baseURL (will be updated dynamically on client-side)
   const client = axios.create({
-    baseURL: API_URL,
+    baseURL: 'http://localhost:3001', // Default, will be overridden on client-side
     headers: {
       'Content-Type': 'application/json',
     },
   });
 
   // Add auth token to requests if available
+  // Also update baseURL dynamically on each request (client-side only)
   client.interceptors.request.use((config) => {
+    // Update baseURL dynamically if we're on the client side
+    if (typeof window !== 'undefined') {
+      config.baseURL = getApiUrl();
+    }
+    
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
     }
