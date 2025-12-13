@@ -1,0 +1,7 @@
+# Allow ethan to restart weather-station services without password
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl restart weather-station-api
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl restart weather-station-web
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl start weather-station-api
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl start weather-station-web
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl stop weather-station-api
+ethan ALL=(ALL) NOPASSWD: /bin/systemctl stop weather-station-web
