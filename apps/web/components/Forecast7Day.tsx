@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { forecastApi, Forecast7DayResponse } from '../lib/api';
-import { LineChart, Line, XAxis, ResponsiveContainer } from 'recharts';
 
 export function Forecast7Day() {
   const [forecast, setForecast] = useState<Forecast7DayResponse | null>(null);
@@ -85,15 +84,6 @@ export function Forecast7Day() {
     return null;
   }
 
-  // Prepare data for sparkline chart (high temps)
-  const chartData = forecast.days.map((day) => {
-    const { dayName } = formatDate(day.date);
-    return {
-      day: dayName,
-      temp: celsiusToFahrenheit(day.tempMaxC),
-    };
-  });
-
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
       <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
@@ -103,34 +93,6 @@ export function Forecast7Day() {
         </div>
       </div>
       <div className="p-6">
-        {/* Temperature Sparkline */}
-        <div className="mb-6">
-          <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-            High Temperature Trend
-          </div>
-          <div className="h-24">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <XAxis
-                  dataKey="day"
-                  stroke="#64748b"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="temp"
-                  stroke="#06b6d4"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
         {/* 7-Day Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           {forecast.days.map((day, index) => {
