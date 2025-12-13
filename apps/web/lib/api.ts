@@ -139,6 +139,7 @@ export interface AutomationRule {
     type: 'set_rain_delay' | 'run_zone';
     hours?: number;
     minutes?: number;
+    zoneIds?: string[]; // Array of zone IDs for run_zone action
   };
   lastRunAt?: string | null;
   lastResult?: string | null;

@@ -29,6 +29,7 @@ interface Actions {
   type: 'set_rain_delay' | 'run_zone';
   hours?: number;
   minutes?: number;
+  zoneIds?: string[]; // Array of zone IDs for run_zone action
 }
 
 /**
@@ -141,73 +142,102 @@ async function executeAction(
       return null;
     }
 
-    const lawnZoneId = await findLawnZone();
-    if (!lawnZoneId) {
-      console.log('No lawn zone found, skipping run_zone action');
+    // Get zones to run - use zoneIds if specified, otherwise fall back to findLawnZone for backward compatibility
+    let zoneIds: string[] = [];
+    
+    if (actions.zoneIds && actions.zoneIds.length > 0) {
+      // Use specified zone IDs
+      zoneIds = actions.zoneIds;
+    } else {
+      // Fallback to finding lawn zone for backward compatibility
+      const lawnZoneId = await findLawnZone();
+      if (!lawnZoneId) {
+        console.log('No zones specified and no lawn zone found, skipping run_zone action');
+        return null;
+      }
+      zoneIds = [lawnZoneId];
+    }
+
+    if (zoneIds.length === 0) {
+      console.log('No zones specified for run_zone action');
       return null;
     }
 
-    // Safety check: Don't water if we've watered this zone in the last 24 hours
-    const lastWatering = await prisma.wateringEvent.findFirst({
-      where: {
-        zoneId: lawnZoneId,
-        timestamp: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-        },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-    });
+    const durationSec = actions.minutes * 60;
+    const successfulZoneIds: string[] = [];
+    const failedZoneIds: string[] = [];
 
-    if (lastWatering) {
-      console.log(`Skipping watering: zone ${lawnZoneId} was watered recently`);
-      return null;
-    }
-
-    try {
-      const durationSec = actions.minutes * 60;
-      await rachioClient.runZone(lawnZoneId, durationSec);
-
-      await prisma.wateringEvent.create({
-        data: {
-          zoneId: lawnZoneId,
-          durationSec,
-          source: 'automation',
-          rawPayload: {
-            soilMoisture: weather.soilMoisture,
-            rain24h: weather.rain24h,
+    // Run each zone
+    for (const zoneId of zoneIds) {
+      // Safety check: Don't water if we've watered this zone in the last 24 hours
+      const lastWatering = await prisma.wateringEvent.findFirst({
+        where: {
+          zoneId: zoneId,
+          timestamp: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
           },
+        },
+        orderBy: {
+          timestamp: 'desc',
         },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'run_zone',
-          details: {
-            zoneId: lawnZoneId,
+      if (lastWatering) {
+        console.log(`Skipping watering: zone ${zoneId} was watered recently`);
+        continue;
+      }
+
+      try {
+        await rachioClient.runZone(zoneId, durationSec);
+
+        await prisma.wateringEvent.create({
+          data: {
+            zoneId: zoneId,
             durationSec,
-            soilMoisture: weather.soilMoisture,
-            rain24h: weather.rain24h,
+            source: 'automation',
+            rawPayload: {
+              soilMoisture: weather.soilMoisture,
+              rain24h: weather.rain24h,
+            },
           },
-          source: 'automation',
-        },
-      });
+        });
 
-      return {
-        triggered: true,
-        action: `run_zone_${actions.minutes}min`,
-        details: {
-          zoneId: lawnZoneId,
-          durationSec,
-          soilMoisture: weather.soilMoisture,
-          rain24h: weather.rain24h,
-        },
-      };
-    } catch (error) {
-      console.error(`Error running zone ${lawnZoneId}:`, error);
+        await prisma.auditLog.create({
+          data: {
+            action: 'run_zone',
+            details: {
+              zoneId: zoneId,
+              durationSec,
+              soilMoisture: weather.soilMoisture,
+              rain24h: weather.rain24h,
+            },
+            source: 'automation',
+          },
+        });
+
+        successfulZoneIds.push(zoneId);
+      } catch (error) {
+        console.error(`Error running zone ${zoneId}:`, error);
+        failedZoneIds.push(zoneId);
+      }
+    }
+
+    if (successfulZoneIds.length === 0) {
+      console.log('No zones were successfully watered');
       return null;
     }
+
+    return {
+      triggered: true,
+      action: `run_zone_${actions.minutes}min`,
+      details: {
+        zoneIds: successfulZoneIds,
+        failedZoneIds,
+        durationSec,
+        soilMoisture: weather.soilMoisture,
+        rain24h: weather.rain24h,
+      },
+    };
   }
 
   return null;

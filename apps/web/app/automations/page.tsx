@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { automationApi, AutomationRule } from '../../lib/api';
+import { automationApi, AutomationRule, rachioApi, RachioZone } from '../../lib/api';
 import Link from 'next/link';
 
 export default function AutomationsPage() {
@@ -224,6 +224,58 @@ function RuleView({
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
 }) {
+  const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
+
+  useEffect(() => {
+    const loadActionDisplay = async () => {
+      if (rule.actions.type === 'set_rain_delay') {
+        setActionDisplay({
+          icon: '⏸️',
+          label: 'Set Rain Delay',
+          value: `${rule.actions.hours} hours`,
+        });
+        return;
+      }
+      if (rule.actions.type === 'run_zone') {
+        let zoneNames = '';
+        if (rule.actions.zoneIds && rule.actions.zoneIds.length > 0) {
+          try {
+            // Fetch zone names
+            const devices = await rachioApi.getDevices();
+            const allZones: RachioZone[] = [];
+            for (const device of devices) {
+              if (device.zones) {
+                allZones.push(...device.zones);
+              }
+            }
+            
+            const selectedZones = allZones.filter(zone => rule.actions.zoneIds?.includes(zone.id));
+            if (selectedZones.length > 0) {
+              zoneNames = selectedZones.map(z => z.name).join(', ');
+            } else {
+              zoneNames = `${rule.actions.zoneIds.length} zone(s)`;
+            }
+          } catch (error) {
+            zoneNames = `${rule.actions.zoneIds.length} zone(s)`;
+          }
+        } else {
+          // Backward compatibility: no zoneIds means it uses the old "find lawn zone" logic
+          zoneNames = 'Lawn Zone (auto)';
+        }
+        
+        setActionDisplay({
+          icon: '🚿',
+          label: 'Run Zone(s)',
+          value: `${rule.actions.minutes} minutes${zoneNames ? ` - ${zoneNames}` : ''}`,
+        });
+        return;
+      }
+      setActionDisplay({ icon: '❓', label: 'Unknown', value: '' });
+    };
+
+    loadActionDisplay();
+  }, [rule.actions]);
+
   const formatConditions = () => {
     const conditions: Array<{ label: string; value: string; icon: string }> = [];
     if (rule.conditions.rain24h) {
@@ -264,26 +316,8 @@ function RuleView({
     return conditions;
   };
 
-  const formatActions = () => {
-    if (rule.actions.type === 'set_rain_delay') {
-      return {
-        icon: '⏸️',
-        label: 'Set Rain Delay',
-        value: `${rule.actions.hours} hours`,
-      };
-    }
-    if (rule.actions.type === 'run_zone') {
-      return {
-        icon: '🚿',
-        label: 'Run Lawn Zone',
-        value: `${rule.actions.minutes} minutes`,
-      };
-    }
-    return { icon: '❓', label: 'Unknown', value: '' };
-  };
-
   const conditions = formatConditions();
-  const action = formatActions();
+  const action = actionDisplay || { icon: '❓', label: 'Loading...', value: '' };
 
   return (
     <div className="p-6">
@@ -427,11 +461,19 @@ function RuleEditor({
   const [enabled, setEnabled] = useState(rule?.enabled ?? true);
   const [conditions, setConditions] = useState(rule?.conditions || {});
   const [actions, setActions] = useState(rule?.actions || { type: 'set_rain_delay' as const });
+  const [zones, setZones] = useState<RachioZone[]>([]);
+  const [loadingZones, setLoadingZones] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert('Rule name is required');
+      return;
+    }
+
+    // Validate run_zone action has zones selected
+    if (actions.type === 'run_zone' && (!actions.zoneIds || actions.zoneIds.length === 0)) {
+      alert('Please select at least one zone for the run zone action');
       return;
     }
 
@@ -461,6 +503,35 @@ function RuleEditor({
     setConditions(newConditions);
   };
 
+  // Fetch zones when run_zone action is selected
+  useEffect(() => {
+    const fetchZones = async () => {
+      if (actions.type === 'run_zone') {
+        setLoadingZones(true);
+        try {
+          const devices = await rachioApi.getDevices();
+          const allZones: RachioZone[] = [];
+          
+          // Get all zones from all devices
+          for (const device of devices) {
+            if (device.zones && device.zones.length > 0) {
+              allZones.push(...device.zones.filter(zone => zone.enabled));
+            }
+          }
+          
+          setZones(allZones);
+        } catch (error) {
+          console.error('Error fetching zones:', error);
+          setZones([]);
+        } finally {
+          setLoadingZones(false);
+        }
+      }
+    };
+
+    fetchZones();
+  }, [actions.type]);
+
   const conditionFields = [
     { key: 'rain24h' as const, label: 'Rain 24h', icon: '🌧️', unit: '"' },
     { key: 'soilMoisture' as const, label: 'Soil Moisture', icon: '🌱', unit: '%' },
@@ -468,6 +539,15 @@ function RuleEditor({
     { key: 'temperature' as const, label: 'Temperature', icon: '🌡️', unit: '°F' },
     { key: 'humidity' as const, label: 'Humidity', icon: '💨', unit: '%' },
   ];
+
+  const handleZoneToggle = (zoneId: string) => {
+    const currentZoneIds = actions.zoneIds || [];
+    const newZoneIds = currentZoneIds.includes(zoneId)
+      ? currentZoneIds.filter(id => id !== zoneId)
+      : [...currentZoneIds, zoneId];
+    
+    setActions({ ...actions, zoneIds: newZoneIds });
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -569,11 +649,19 @@ function RuleEditor({
         <div className="space-y-4">
           <select
             value={actions.type}
-            onChange={(e) => setActions({ type: e.target.value as any, hours: undefined, minutes: undefined })}
+            onChange={(e) => {
+              const newType = e.target.value as 'set_rain_delay' | 'run_zone';
+              setActions({ 
+                type: newType, 
+                hours: undefined, 
+                minutes: undefined,
+                zoneIds: newType === 'run_zone' ? (actions.zoneIds || []) : undefined
+              });
+            }}
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
           >
             <option value="set_rain_delay">⏸️ Set Rain Delay</option>
-            <option value="run_zone">🚿 Run Lawn Zone</option>
+            <option value="run_zone">🚿 Run Zone(s)</option>
           </select>
           {actions.type === 'set_rain_delay' && (
             <div>
@@ -590,18 +678,57 @@ function RuleEditor({
             </div>
           )}
           {actions.type === 'run_zone' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Duration (Minutes)</label>
-              <input
-                type="number"
-                min="1"
-                value={actions.minutes || ''}
-                onChange={(e) => setActions({ ...actions, minutes: parseInt(e.target.value) })}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                required
-                placeholder="10"
-              />
-            </div>
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Zone(s) <span className="text-red-500">*</span>
+                </label>
+                {loadingZones ? (
+                  <div className="text-sm text-slate-500 py-2">Loading zones...</div>
+                ) : zones.length === 0 ? (
+                  <div className="text-sm text-amber-600 py-2 bg-amber-50 border border-amber-200 rounded-lg px-3">
+                    No enabled zones found. Make sure zones are enabled in your Rachio device.
+                  </div>
+                ) : (
+                  <div className="border border-slate-300 rounded-lg bg-white max-h-48 overflow-y-auto">
+                    {zones.map((zone) => {
+                      const isSelected = (actions.zoneIds || []).includes(zone.id);
+                      return (
+                        <label
+                          key={zone.id}
+                          className={`flex items-center px-4 py-3 border-b border-slate-200 last:border-b-0 cursor-pointer hover:bg-blue-50 transition-colors ${
+                            isSelected ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleZoneToggle(zone.id)}
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 focus:ring-2"
+                          />
+                          <span className="ml-3 text-sm font-medium text-slate-700">{zone.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {(actions.zoneIds || []).length === 0 && !loadingZones && zones.length > 0 && (
+                  <p className="text-xs text-amber-600 mt-2">Please select at least one zone</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Duration (Minutes) <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min="1"
+                  value={actions.minutes || ''}
+                  onChange={(e) => setActions({ ...actions, minutes: parseInt(e.target.value) })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  required
+                  placeholder="10"
+                />
+              </div>
+            </>
           )}
         </div>
       </div>
