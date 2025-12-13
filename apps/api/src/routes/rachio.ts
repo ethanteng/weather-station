@@ -17,7 +17,36 @@ router.get('/devices', async (_req: Request, res: Response) => {
       },
     });
 
-    return res.json(devices);
+    // Enrich zones with data from rawPayload
+    const enrichedDevices = devices.map(device => ({
+      ...device,
+      zones: device.zones.map(zone => {
+        const rawPayload = zone.rawPayload as any;
+        // Try multiple possible field names for image URL
+        const imageUrl = rawPayload?.imageUrl || rawPayload?.image_url || rawPayload?.image || rawPayload?.imageUrlFull || null;
+        
+        return {
+          id: zone.id,
+          name: zone.name,
+          enabled: zone.enabled,
+          zoneNumber: rawPayload?.zoneNumber || rawPayload?.zone || null,
+          imageUrl,
+          area: rawPayload?.area || null,
+          rootZoneDepth: rawPayload?.rootZoneDepth || rawPayload?.rootZoneDepthIn || null,
+          availableWater: rawPayload?.availableWater || rawPayload?.availableWaterIn || null,
+          maxRuntime: rawPayload?.maxRuntime || rawPayload?.maxRuntimeSeconds ? Math.round(rawPayload.maxRuntimeSeconds / 60) : null,
+          runtime: rawPayload?.runtime || rawPayload?.runtimeSeconds ? Math.round(rawPayload.runtimeSeconds / 60) : null,
+          customNozzle: rawPayload?.customNozzle || rawPayload?.nozzle || null,
+          customShade: rawPayload?.customShade || rawPayload?.shade || null,
+          customSlope: rawPayload?.customSlope || rawPayload?.slope || null,
+          customCrop: rawPayload?.customCrop || rawPayload?.crop || null,
+          customSoil: rawPayload?.customSoil || rawPayload?.soil || null,
+          rawPayload: zone.rawPayload,
+        };
+      }),
+    }));
+
+    return res.json(enrichedDevices);
   } catch (error) {
     console.error('Error fetching Rachio devices:', error);
     return res.status(500).json({ error: 'Failed to fetch devices' });

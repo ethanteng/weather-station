@@ -7,6 +7,7 @@ import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { SoilMoistureChart } from '../components/SoilMoistureChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
+import { RachioZone } from '../lib/api';
 
 export default function Dashboard() {
   const [latestWeather, setLatestWeather] = useState<WeatherReading | null>(null);
@@ -313,16 +314,16 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="p-6">
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {devices.map((device) => (
                   <div
                     key={device.id}
-                    className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+                    className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
                   >
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <span className="text-xl">📡</span>
-                        <span className="font-semibold text-slate-900">{device.name}</span>
+                        <span className="font-semibold text-slate-900 text-lg">{device.name}</span>
                       </div>
                       <span
                         className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
@@ -345,20 +346,11 @@ export default function Dashboard() {
                       </span>
                     </div>
                     {device.zones.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-200">
-                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Zones</div>
-                        <div className="flex flex-wrap gap-2">
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Zones ({device.zones.length})</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {device.zones.map((zone) => (
-                            <span
-                              key={zone.id}
-                              className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
-                                zone.enabled
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}
-                            >
-                              {zone.name}
-                            </span>
+                            <ZoneCard key={zone.id} zone={zone} />
                           ))}
                         </div>
                       </div>
@@ -370,6 +362,137 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ZoneCard({ zone }: { zone: RachioZone }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+      {/* Zone Header */}
+      <div
+        className="p-4 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            {zone.zoneNumber && (
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                {zone.zoneNumber}
+              </span>
+            )}
+            <span className="font-semibold text-slate-900">{zone.name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                zone.enabled
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {zone.enabled ? '✓' : '✗'}
+            </span>
+            <svg
+              className={`w-4 h-4 text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+        {zone.imageUrl && (
+          <div className="mt-2 rounded overflow-hidden bg-slate-100">
+            <img
+              src={zone.imageUrl}
+              alt={zone.name}
+              className="w-full h-32 object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Expanded Details */}
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-slate-200 bg-slate-50">
+          <div className="pt-3 space-y-2">
+            {zone.area && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Area:</span>
+                <span className="font-medium text-slate-900">{zone.area.toLocaleString()} sq ft</span>
+              </div>
+            )}
+            {zone.rootZoneDepth && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Root Zone Depth:</span>
+                <span className="font-medium text-slate-900">{zone.rootZoneDepth}"</span>
+              </div>
+            )}
+            {zone.availableWater !== null && zone.availableWater !== undefined && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Available Water:</span>
+                <span className="font-medium text-slate-900">{zone.availableWater.toFixed(2)}"</span>
+              </div>
+            )}
+            {zone.maxRuntime && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Max Runtime:</span>
+                <span className="font-medium text-slate-900">{zone.maxRuntime} min</span>
+              </div>
+            )}
+            {zone.runtime && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Runtime:</span>
+                <span className="font-medium text-slate-900">{zone.runtime} min</span>
+              </div>
+            )}
+            {(zone.customNozzle || zone.customShade || zone.customSlope || zone.customCrop || zone.customSoil) && (
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Custom Settings</div>
+                <div className="space-y-1">
+                  {zone.customNozzle && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Nozzle:</span>
+                      <span className="font-medium text-slate-700">{zone.customNozzle}</span>
+                    </div>
+                  )}
+                  {zone.customShade && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Shade:</span>
+                      <span className="font-medium text-slate-700">{zone.customShade}</span>
+                    </div>
+                  )}
+                  {zone.customSlope && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Slope:</span>
+                      <span className="font-medium text-slate-700">{zone.customSlope}</span>
+                    </div>
+                  )}
+                  {zone.customCrop && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Crop:</span>
+                      <span className="font-medium text-slate-700">{zone.customCrop}</span>
+                    </div>
+                  )}
+                  {zone.customSoil && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Soil:</span>
+                      <span className="font-medium text-slate-700">{zone.customSoil}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

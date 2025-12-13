@@ -74,6 +74,18 @@ export interface RachioZone {
   id: string;
   name: string;
   enabled: boolean;
+  zoneNumber?: number | null;
+  imageUrl?: string | null;
+  area?: number | null;
+  rootZoneDepth?: number | null;
+  availableWater?: number | null;
+  maxRuntime?: number | null;
+  runtime?: number | null;
+  customNozzle?: string | null;
+  customShade?: string | null;
+  customSlope?: string | null;
+  customCrop?: string | null;
+  customSoil?: string | null;
 }
 
 export interface WateringEvent {
