@@ -2,18 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor } from '../lib/api';
+import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { SoilMoistureChart } from '../components/SoilMoistureChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
 import { Forecast7Day } from '../components/Forecast7Day';
+import { ScheduleCalendar } from '../components/ScheduleCalendar';
 import { RachioZone } from '../lib/api';
 
 export default function Dashboard() {
   const [latestWeather, setLatestWeather] = useState<WeatherReading | null>(null);
   const [weather24h, setWeather24h] = useState<WeatherSummary | null>(null);
   const [weather7d, setWeather7d] = useState<WeatherSummary | null>(null);
+  const [forecast16d, setForecast16d] = useState<Forecast16DayResponse | null>(null);
   const [devices, setDevices] = useState<RachioDevice[]>([]);
   const [wateringEvents, setWateringEvents] = useState<WateringEvent[]>([]);
   const [automations, setAutomations] = useState<AutomationRule[]>([]);
@@ -47,10 +49,11 @@ export default function Dashboard() {
       const { setAuthToken: setApiAuth } = await import('../lib/api');
       setApiAuth(authToken);
 
-      const [latest, summary24h, summary7d, rachioDevices, automationRulesResponse, events, sensorData] = await Promise.all([
+      const [latest, summary24h, summary7d, forecast16Day, rachioDevices, automationRulesResponse, events, sensorData] = await Promise.all([
         weatherApi.getLatest().catch(() => null),
         weatherApi.getSummary('24h').catch(() => null),
         weatherApi.getSummary('7d').catch(() => null),
+        forecastApi.get16Day().catch(() => null),
         rachioApi.getDevices().catch(() => []),
         automationApi.getRules().catch(() => []),
         wateringApi.getEvents(10).catch(() => []),
@@ -60,6 +63,7 @@ export default function Dashboard() {
       setLatestWeather(latest);
       setWeather24h(summary24h);
       setWeather7d(summary7d);
+      setForecast16d(forecast16Day);
       setDevices(rachioDevices);
       
       // Handle automation rules response (can be array or object with rateLimitError)
@@ -366,201 +370,16 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Automation Rules */}
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Automation Rules</h2>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={async () => {
-                    if (pollingRachio || rachioRateLimit?.rateLimited) return;
-                    setPollingRachio(true);
-                    try {
-                      await rachioApi.poll();
-                      // Refresh data after poll
-                      await fetchData();
-                      await checkRachioRateLimit();
-                      alert('Rachio data poll completed successfully');
-                    } catch (err: any) {
-                      // Check if it's a rate limit error
-                      if (err.response?.status === 429) {
-                        const rateLimitData = err.response.data;
-                        setRachioRateLimit({
-                          rateLimited: true,
-                          resetTime: rateLimitData.rateLimitReset || null,
-                          message: rateLimitData.message,
-                        });
-                        alert(`Rate limit exceeded. ${rateLimitData.message || 'Please try again later.'}`);
-                      } else {
-                        alert(`Failed to poll Rachio data: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                      }
-                    } finally {
-                      setPollingRachio(false);
-                    }
-                  }}
-                  disabled={pollingRachio || rachioRateLimit?.rateLimited === true}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : "Manually refresh Rachio device and zone data"}
-                >
-                  {pollingRachio ? (
-                    <>
-                      <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Polling...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Refresh Rachio Data
-                    </>
-                  )}
-                </button>
-                <Link
-                  href="/automations"
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 min-h-[44px]"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Manage Rules
-                </Link>
-              </div>
-            </div>
-          </div>
-          <div className="p-6">
-            {automations.length > 0 ? (
-              <div className="space-y-6">
-                {/* Custom Rules Section */}
-                {automations.filter(r => r.source !== 'rachio').length > 0 && (
-                  <div>
-                    <div className="mb-3">
-                      <h3 className="text-lg font-semibold text-slate-800">Custom Automation Rules</h3>
-                      <p className="text-xs text-slate-500 mt-1">Rules configured in this app</p>
-                    </div>
-                    <div className="space-y-2">
-                      {automations
-                        .filter(r => r.source !== 'rachio')
-                        .map((rule) => (
-                          <div
-                            key={rule.id}
-                            className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
-                                  rule.enabled
-                                    ? 'bg-green-100 text-green-800 border border-green-300'
-                                    : 'bg-slate-50 text-slate-500 border border-slate-200'
-                                }`}
-                              >
-                                {rule.enabled ? 'Enabled' : 'Disabled'}
-                              </span>
-                              <span className="font-semibold text-slate-900">{rule.name}</span>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Rachio Schedules Section */}
-                {automations.filter(r => r.source === 'rachio').length > 0 && (
-                  <div>
-                    <div className="mb-3">
-                      <h3 className="text-lg font-semibold text-slate-800">Rachio Schedules</h3>
-                      <p className="text-xs text-slate-500 mt-1">Schedules configured in the Rachio app</p>
-                    </div>
-                    {(() => {
-                      // Group Rachio schedules by device name
-                      const rachioRules = automations.filter(r => r.source === 'rachio');
-                      const groupedByDevice = rachioRules.reduce((acc, rule) => {
-                        const deviceName = rule.deviceName || 'Unknown Device';
-                        if (!acc[deviceName]) {
-                          acc[deviceName] = [];
-                        }
-                        acc[deviceName].push(rule);
-                        return acc;
-                      }, {} as Record<string, AutomationRule[]>);
-
-                      // Sort device names (frontyard/backyard first if they exist)
-                      const deviceNames = Object.keys(groupedByDevice).sort((a, b) => {
-                        const aLower = a.toLowerCase();
-                        const bLower = b.toLowerCase();
-                        if (aLower.includes('front') && !bLower.includes('front')) return -1;
-                        if (!aLower.includes('front') && bLower.includes('front')) return 1;
-                        if (aLower.includes('back') && !bLower.includes('back')) return -1;
-                        if (!aLower.includes('back') && bLower.includes('back')) return 1;
-                        return a.localeCompare(b);
-                      });
-
-                      return (
-                        <div className="space-y-4">
-                          {deviceNames.map((deviceName) => (
-                            <div key={deviceName}>
-                              <div className="mb-2 flex items-center gap-2">
-                                <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
-                                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                  </svg>
-                                  {deviceName}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  ({groupedByDevice[deviceName].length} schedule{groupedByDevice[deviceName].length !== 1 ? 's' : ''})
-                                </span>
-                              </div>
-                              <div className="space-y-2 ml-2">
-                                {groupedByDevice[deviceName].map((rule) => (
-                                  <div
-                                    key={rule.id}
-                                    className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-lg border border-indigo-100 hover:bg-indigo-50 transition-colors"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <span
-                                        className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
-                                          rule.enabled
-                                            ? 'bg-green-100 text-green-800 border border-green-300'
-                                            : 'bg-slate-50 text-slate-500 border border-slate-200'
-                                        }`}
-                                      >
-                                        {rule.enabled ? 'Enabled' : 'Disabled'}
-                                      </span>
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-300">
-                                        Rachio
-                                      </span>
-                                      <span className="font-semibold text-slate-900">{rule.name}</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <svg className="w-12 h-12 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <p className="text-slate-600">No automation rules found.</p>
-                <Link
-                  href="/automations"
-                  className="inline-flex items-center mt-4 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all"
-                >
-                  Create Your First Rule
-                </Link>
-              </div>
-            )}
-          </div>
+        {/* Schedule Calendar */}
+        <div className="mb-6">
+          <ScheduleCalendar
+            automations={automations}
+            forecast={forecast16d}
+            onScheduleSkipped={() => {
+              // Refresh automation rules after skipping
+              fetchData();
+            }}
+          />
         </div>
 
         {/* Rachio Devices Status */}

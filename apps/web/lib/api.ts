@@ -251,6 +251,14 @@ export interface Forecast7DayResponse {
   days: DailyForecast[]; // length 7
 }
 
+export interface Forecast16DayResponse {
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  generatedAt: string; // ISO
+  days: DailyForecast[]; // length up to 16
+}
+
 export const weatherApi = {
   async getLatest(): Promise<WeatherReading> {
     const response = await api.get<WeatherReading>('/api/weather/latest');
@@ -377,6 +385,20 @@ export const forecastApi = {
       params.lon = lon.toString();
     }
     const response = await api.get<Forecast7DayResponse>('/api/forecast/7day', {
+      params,
+    });
+    return response.data;
+  },
+
+  async get16Day(lat?: number, lon?: number): Promise<Forecast16DayResponse> {
+    const params: Record<string, string> = {};
+    if (lat !== undefined) {
+      params.lat = lat.toString();
+    }
+    if (lon !== undefined) {
+      params.lon = lon.toString();
+    }
+    const response = await api.get<Forecast16DayResponse>('/api/forecast/16day', {
       params,
     });
     return response.data;
