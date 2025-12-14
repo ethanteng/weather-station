@@ -47,7 +47,7 @@ export default function Dashboard() {
       const { setAuthToken: setApiAuth } = await import('../lib/api');
       setApiAuth(authToken);
 
-      const [latest, summary24h, summary7d, rachioDevices, automationRules, events, sensorData] = await Promise.all([
+      const [latest, summary24h, summary7d, rachioDevices, automationRulesResponse, events, sensorData] = await Promise.all([
         weatherApi.getLatest().catch(() => null),
         weatherApi.getSummary('24h').catch(() => null),
         weatherApi.getSummary('7d').catch(() => null),
@@ -61,7 +61,17 @@ export default function Dashboard() {
       setWeather24h(summary24h);
       setWeather7d(summary7d);
       setDevices(rachioDevices);
-      setAutomations(automationRules);
+      
+      // Handle automation rules response (can be array or object with rateLimitError)
+      if (Array.isArray(automationRulesResponse)) {
+        setAutomations(automationRulesResponse);
+      } else if (automationRulesResponse && typeof automationRulesResponse === 'object' && 'rules' in automationRulesResponse) {
+        setAutomations((automationRulesResponse as any).rules || []);
+        // Note: Rate limit info for dashboard is handled separately via getRateLimitStatus
+      } else {
+        setAutomations([]);
+      }
+      
       setWateringEvents(events);
       setSensors(sensorData.filter(s => s.enabled));
 
