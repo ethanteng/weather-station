@@ -1,26 +1,11 @@
 import axios, { AxiosInstance } from 'axios';
 
-// Determine API URL dynamically based on current hostname
-// This allows the app to work whether accessed via localhost or network IP
-function getApiUrl(): string {
-  // If explicitly set in env, use that
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // Otherwise, detect based on current hostname (client-side only)
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    // If accessing via localhost, use localhost for API
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3001';
-    }
-    // Otherwise, use the same hostname with port 3001
-    return `http://${hostname}:3001`;
-  }
-  
-  // Fallback for SSR
-  return 'http://localhost:3001';
+// Get API base URL from environment variable
+// Production must use NEXT_PUBLIC_API_URL (e.g., https://api.253510thave.com)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_BASE) {
+  throw new Error('NEXT_PUBLIC_API_URL environment variable is required');
 }
 
 // Note: In a real app, you'd handle auth differently
@@ -32,22 +17,15 @@ export function setAuthToken(token: string): void {
 }
 
 function createClient(): AxiosInstance {
-  // Start with a default baseURL (will be updated dynamically on client-side)
   const client = axios.create({
-    baseURL: 'http://localhost:3001', // Default, will be overridden on client-side
+    baseURL: API_BASE,
     headers: {
       'Content-Type': 'application/json',
     },
   });
 
   // Add auth token to requests if available
-  // Also update baseURL dynamically on each request (client-side only)
   client.interceptors.request.use((config) => {
-    // Update baseURL dynamically if we're on the client side
-    if (typeof window !== 'undefined') {
-      config.baseURL = getApiUrl();
-    }
-    
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
     }
