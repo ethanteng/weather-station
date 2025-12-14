@@ -92,9 +92,9 @@ export function Forecast7Day() {
           <h2 className="text-xl font-semibold text-white">7-Day Forecast</h2>
         </div>
       </div>
-      <div className="p-6">
-        {/* 7-Day Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="px-4 py-3">
+        {/* Compact 7-Day Forecast - Single Row */}
+        <div className="grid grid-cols-7 gap-2">
           {forecast.days.map((day, index) => {
             const { dayName, date } = formatDate(day.date);
             const tempMaxF = celsiusToFahrenheit(day.tempMaxC);
@@ -104,135 +104,58 @@ export function Forecast7Day() {
             const hasSignificantRain = precipProb >= 30 || precipInches > 0.01;
             const hasHeavyRain = precipProb >= 50 || precipInches > 0.1;
 
-            // Determine background color based on precipitation
-            const getBackgroundColor = () => {
-              if (hasHeavyRain) {
-                return 'bg-gradient-to-br from-blue-100 to-blue-200 border-blue-400';
-              } else if (hasSignificantRain) {
-                return 'bg-blue-50 border-blue-300';
-              }
-              return 'bg-slate-50 border-slate-200';
-            };
-
-            // Determine precipitation text color
-            const getPrecipColor = () => {
-              if (hasHeavyRain) {
-                return 'text-blue-900 font-bold';
-              } else if (hasSignificantRain) {
-                return 'text-blue-800 font-semibold';
-              }
-              return 'text-blue-600';
-            };
-
             return (
               <div
                 key={index}
-                className={`${getBackgroundColor()} rounded-lg border-2 p-4 hover:shadow-md transition-all ${
-                  hasHeavyRain ? 'shadow-sm' : ''
+                className={`rounded-lg border-2 p-2 transition-all ${
+                  hasHeavyRain
+                    ? 'bg-gradient-to-br from-blue-200 to-blue-300 border-blue-500 shadow-md'
+                    : hasSignificantRain
+                    ? 'bg-blue-100 border-blue-400'
+                    : 'bg-slate-50 border-slate-200'
                 }`}
               >
-                <div className="text-center">
-                  {/* Day and Date */}
-                  <div className="mb-3">
-                    <div className="font-semibold text-slate-900 text-sm flex items-center justify-center gap-1">
-                      {hasSignificantRain && (
-                        <svg
-                          className="w-4 h-4 text-blue-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
-                          />
-                        </svg>
-                      )}
-                      {dayName}
-                    </div>
-                    <div className="text-xs text-slate-600">{date}</div>
-                  </div>
-
-                  {/* Temperature */}
-                  <div className="mb-3">
-                    <div className="text-lg font-bold text-slate-900">
-                      {tempMaxF.toFixed(0)}°F
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {tempMinF.toFixed(0)}°F
-                    </div>
-                  </div>
-
-                  {/* Precipitation Probability */}
-                  <div className="mb-2">
-                    <div className="text-xs text-slate-600 mb-1 flex items-center justify-center gap-1">
-                      {hasSignificantRain && (
-                        <svg
-                          className={`w-4 h-4 ${hasHeavyRain ? 'text-blue-800' : 'text-blue-600'}`}
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                        </svg>
-                      )}
-                      Precip
-                    </div>
-                    <div className={`text-base ${getPrecipColor()} flex items-center justify-center gap-1`}>
-                      {hasSignificantRain && (
-                        <svg
-                          className="w-4 h-4"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                        </svg>
-                      )}
-                      {precipProb}%
-                      {hasHeavyRain && (
-                        <span className="ml-1 text-xs" title="Heavy rain expected">🌧️</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Precipitation Amount */}
+                <div className="text-center space-y-1">
+                  {/* Day and Date - Compact */}
                   <div>
-                    <div className="text-xs text-slate-600 mb-1 flex items-center justify-center gap-1">
-                      {precipInches > 0.01 && (
-                        <svg
-                          className="w-3 h-3 text-blue-600"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      )}
-                      Amount
+                    <div className={`text-xs font-semibold flex items-center justify-center gap-1 ${
+                      hasSignificantRain ? 'text-blue-900' : 'text-slate-700'
+                    }`}>
+                      {hasSignificantRain && <span>🌧️</span>}
+                      <span>{dayName}</span>
                     </div>
-                    <div className={`text-sm ${getPrecipColor()} flex items-center justify-center gap-1`}>
-                      {precipInches > 0.01 && (
-                        <svg
-                          className="w-4 h-4"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      )}
-                      <span className={precipInches > 0.1 ? 'font-bold' : ''}>
-                        {precipInches.toFixed(2)} in
-                      </span>
-                    </div>
+                    <div className="text-[10px] text-slate-600">{date}</div>
                   </div>
+
+                  {/* Temperature - Inline, Smaller */}
+                  <div className="text-xs text-slate-600">
+                    <span className="font-medium">{tempMaxF.toFixed(0)}°</span>
+                    <span className="text-slate-500">/{tempMinF.toFixed(0)}°</span>
+                  </div>
+
+                  {/* Rain Info - Highlighted */}
+                  {hasSignificantRain ? (
+                    <div className={`pt-1 border-t ${
+                      hasHeavyRain ? 'border-blue-600' : 'border-blue-400'
+                    }`}>
+                      <div className={`text-xs font-bold ${
+                        hasHeavyRain ? 'text-blue-900' : 'text-blue-800'
+                      }`}>
+                        {precipProb}%
+                      </div>
+                      {precipInches > 0.01 && (
+                        <div className={`text-[10px] ${
+                          hasHeavyRain ? 'text-blue-900 font-bold' : 'text-blue-700'
+                        }`}>
+                          {precipInches.toFixed(2)}"
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400 pt-1">
+                      {precipProb}%
+                    </div>
+                  )}
                 </div>
               </div>
             );
