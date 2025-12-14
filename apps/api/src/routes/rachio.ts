@@ -1,10 +1,24 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { RachioClient } from '../clients/rachio';
+import { RachioClient, RachioRateLimitError, getRachioRateLimitStatus } from '../clients/rachio';
 import { pollRachioData } from '../jobs/rachioPoll';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Helper to handle rate limit errors
+function handleRateLimitError(error: unknown, res: Response): boolean {
+  if (error instanceof RachioRateLimitError) {
+    res.status(429).json({
+      error: 'Rachio API rate limit exceeded',
+      rateLimitReset: error.resetTime?.toISOString() || null,
+      remaining: error.remaining,
+      message: error.message,
+    });
+    return true;
+  }
+  return false;
+}
 
 /**
  * GET /api/rachio/devices
@@ -422,9 +436,66 @@ router.post('/poll', async (_req: Request, res: Response) => {
     await pollRachioData();
     return res.json({ success: true, message: 'Rachio data poll completed' });
   } catch (error) {
+    if (handleRateLimitError(error, res)) {
+      return;
+    }
     console.error('Error in manual Rachio poll:', error);
     return res.status(500).json({ 
       error: 'Failed to poll Rachio data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/rachio/rate-limit-status
+ * Get current rate limit status
+ */
+router.get('/rate-limit-status', async (_req: Request, res: Response) => {
+  try {
+    // First check if we have a stored rate limit
+    const status = getRachioRateLimitStatus();
+    if (status.rateLimited && status.resetTime) {
+      return res.json({
+        rateLimited: true,
+        resetTime: status.resetTime.toISOString(),
+        remaining: null,
+        message: `Rate limit active. Resets at ${status.resetTime.toISOString()}`,
+      });
+    }
+
+    // If not rate limited, try a lightweight API call to get current status
+    const apiKey = process.env.RACHIO_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    try {
+      await client.getPerson();
+      return res.json({ 
+        rateLimited: false,
+        resetTime: null,
+      });
+    } catch (error) {
+      if (error instanceof RachioRateLimitError) {
+        return res.json({
+          rateLimited: true,
+          resetTime: error.resetTime?.toISOString() || null,
+          remaining: error.remaining,
+          message: error.message,
+        });
+      }
+      // For other errors, assume not rate limited (might be network/auth error)
+      return res.json({
+        rateLimited: false,
+        resetTime: null,
+      });
+    }
+  } catch (error) {
+    console.error('Error checking rate limit status:', error);
+    return res.status(500).json({ 
+      error: 'Failed to check rate limit status',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

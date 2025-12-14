@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { evaluateRules } from '../automation/engine';
-import { RachioClient } from '../clients/rachio';
+import { RachioClient, RachioRateLimitError } from '../clients/rachio';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -78,11 +78,32 @@ router.get('/', async (_req: Request, res: Response) => {
             }));
             rachioSchedules.push(...transformedSchedules);
           } catch (error) {
+            // If rate limited, propagate the error with reset time
+            if (error instanceof RachioRateLimitError) {
+              throw error;
+            }
             console.error(`Error fetching schedules for device ${device.id}:`, error);
             // Continue with other devices even if one fails
           }
         }
       } catch (error) {
+        // If rate limited, return error with reset time info
+        if (error instanceof RachioRateLimitError) {
+          // Return custom rules but include rate limit info
+          const customRulesWithSource = customRules.map(rule => ({
+            ...rule,
+            source: 'custom' as const,
+          }));
+          
+          return res.status(200).json({
+            rules: customRulesWithSource,
+            rateLimitError: {
+              rateLimitReset: error.resetTime?.toISOString() || null,
+              remaining: error.remaining,
+              message: error.message,
+            },
+          });
+        }
         console.error('Error fetching Rachio schedules:', error);
         // Continue without Rachio schedules if API fails
       }
@@ -99,6 +120,7 @@ router.get('/', async (_req: Request, res: Response) => {
       a.name.localeCompare(b.name)
     );
 
+    // Return as array (normal case) or object with rateLimitError if rate limited
     return res.json(allRules);
   } catch (error) {
     console.error('Error fetching automations:', error);

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { RachioClient } from '../clients/rachio';
+import { RachioClient, RachioRateLimitError } from '../clients/rachio';
 
 const prisma = new PrismaClient();
 
@@ -81,6 +81,15 @@ export async function pollRachioData(): Promise<void> {
 
     console.log('Rachio data poll completed successfully');
   } catch (error) {
+    // If rate limited, log but don't create audit log (it's expected)
+    if (error instanceof RachioRateLimitError) {
+      console.warn('Rachio poll skipped due to rate limit:', error.message);
+      if (error.resetTime) {
+        console.log(`Rate limit resets at: ${error.resetTime.toISOString()}`);
+      }
+      return;
+    }
+
     console.error('Error polling Rachio data:', error);
 
     // Log error to audit log

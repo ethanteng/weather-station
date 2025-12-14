@@ -22,6 +22,11 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
   const [pollingRachio, setPollingRachio] = useState(false);
+  const [rachioRateLimit, setRachioRateLimit] = useState<{
+    rateLimited: boolean;
+    resetTime: string | null;
+    message?: string;
+  } | null>(null);
 
   // Simple auth prompt (Phase 1)
   useEffect(() => {
@@ -70,11 +75,30 @@ export default function Dashboard() {
   useEffect(() => {
     if (authToken) {
       fetchData();
+      checkRachioRateLimit();
       // Refresh every 30 seconds
       const interval = setInterval(fetchData, 30000);
-      return () => clearInterval(interval);
+      // Check rate limit status every minute
+      const rateLimitInterval = setInterval(checkRachioRateLimit, 60000);
+      return () => {
+        clearInterval(interval);
+        clearInterval(rateLimitInterval);
+      };
     }
   }, [authToken]);
+
+  const checkRachioRateLimit = async () => {
+    if (!authToken) return;
+    try {
+      const { setAuthToken: setApiAuth } = await import('../lib/api');
+      setApiAuth(authToken);
+      const status = await rachioApi.getRateLimitStatus();
+      setRachioRateLimit(status);
+    } catch (err) {
+      // Silently fail - rate limit check is not critical
+      console.error('Error checking rate limit status:', err);
+    }
+  };
 
   if (!authToken) {
     return (
@@ -139,6 +163,43 @@ export default function Dashboard() {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
               <p className="text-red-800 font-medium">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Rachio Rate Limit Info */}
+        {rachioRateLimit?.rateLimited && (
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-blue-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-blue-800 font-medium mb-1">Rachio API Rate Limit Active</p>
+                <p className="text-blue-700 text-sm">
+                  {rachioRateLimit.resetTime ? (
+                    <>
+                      Rate limit will reset at{' '}
+                      <span className="font-semibold">
+                        {new Date(rachioRateLimit.resetTime).toLocaleString()}
+                      </span>
+                      {' '}({(() => {
+                        const resetTime = new Date(rachioRateLimit.resetTime);
+                        const now = new Date();
+                        const msUntilReset = resetTime.getTime() - now.getTime();
+                        const hoursUntilReset = Math.floor(msUntilReset / (1000 * 60 * 60));
+                        const minutesUntilReset = Math.floor((msUntilReset % (1000 * 60 * 60)) / (1000 * 60));
+                        if (hoursUntilReset > 0) {
+                          return `${hoursUntilReset}h ${minutesUntilReset}m`;
+                        }
+                        return `${minutesUntilReset}m`;
+                      })()} remaining)
+                    </>
+                  ) : (
+                    rachioRateLimit.message || 'Please wait before making more requests.'
+                  )}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -304,22 +365,34 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={async () => {
-                    if (pollingRachio) return;
+                    if (pollingRachio || rachioRateLimit?.rateLimited) return;
                     setPollingRachio(true);
                     try {
                       await rachioApi.poll();
                       // Refresh data after poll
                       await fetchData();
+                      await checkRachioRateLimit();
                       alert('Rachio data poll completed successfully');
-                    } catch (err) {
-                      alert(`Failed to poll Rachio data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                    } catch (err: any) {
+                      // Check if it's a rate limit error
+                      if (err.response?.status === 429) {
+                        const rateLimitData = err.response.data;
+                        setRachioRateLimit({
+                          rateLimited: true,
+                          resetTime: rateLimitData.rateLimitReset || null,
+                          message: rateLimitData.message,
+                        });
+                        alert(`Rate limit exceeded. ${rateLimitData.message || 'Please try again later.'}`);
+                      } else {
+                        alert(`Failed to poll Rachio data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                      }
                     } finally {
                       setPollingRachio(false);
                     }
                   }}
-                  disabled={pollingRachio}
+                  disabled={pollingRachio || rachioRateLimit?.rateLimited === true}
                   className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Manually refresh Rachio device and zone data"
+                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : "Manually refresh Rachio device and zone data"}
                 >
                   {pollingRachio ? (
                     <>

@@ -87,6 +87,50 @@ export interface RachioSchedule {
   [key: string]: unknown;
 }
 
+export class RachioRateLimitError extends Error {
+  constructor(
+    message: string,
+    public resetTime: Date | null,
+    public remaining: number | null
+  ) {
+    super(message);
+    this.name = 'RachioRateLimitError';
+  }
+}
+
+// Shared rate limit tracker across all RachioClient instances
+class RachioRateLimitTracker {
+  private rateLimitResetTime: Date | null = null;
+
+  setResetTime(resetTime: Date | null): void {
+    this.rateLimitResetTime = resetTime;
+  }
+
+  getResetTime(): Date | null {
+    // Clear if expired
+    if (this.rateLimitResetTime && new Date() >= this.rateLimitResetTime) {
+      this.rateLimitResetTime = null;
+    }
+    return this.rateLimitResetTime;
+  }
+
+  isRateLimited(): boolean {
+    const resetTime = this.getResetTime();
+    return resetTime !== null && new Date() < resetTime;
+  }
+}
+
+const rateLimitTracker = new RachioRateLimitTracker();
+
+// Export function to get rate limit status without making API call
+export function getRachioRateLimitStatus(): { rateLimited: boolean; resetTime: Date | null } {
+  const resetTime = rateLimitTracker.getResetTime();
+  return {
+    rateLimited: resetTime !== null && new Date() < resetTime,
+    resetTime,
+  };
+}
+
 export class RachioClient {
   private client: AxiosInstance;
   private cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
@@ -103,14 +147,47 @@ export class RachioClient {
       },
     });
 
-    // Add response interceptor to log rate limit headers
+    // Add request interceptor to check rate limit before making requests
+    this.client.interceptors.request.use(
+      (config) => {
+        // Check if we're still rate limited (using shared tracker)
+        if (rateLimitTracker.isRateLimited()) {
+          const resetTime = rateLimitTracker.getResetTime();
+          if (resetTime) {
+            const msUntilReset = resetTime.getTime() - Date.now();
+            const minutesUntilReset = Math.ceil(msUntilReset / 60000);
+            throw new RachioRateLimitError(
+              `Rate limit still active. Resets in ${minutesUntilReset} minute(s)`,
+              resetTime,
+              null
+            );
+          }
+        }
+        return config;
+      }
+    );
+
+    // Add response interceptor to log rate limit headers and track reset time
     this.client.interceptors.response.use(
       (response) => {
         const remaining = response.headers['x-ratelimit-remaining'];
         const limit = response.headers['x-ratelimit-limit'];
+        const reset = response.headers['x-ratelimit-reset'];
+        
         if (remaining !== undefined && parseInt(remaining) < 100) {
           console.warn(`Rachio API rate limit warning: ${remaining}/${limit} requests remaining`);
         }
+        
+        // Update reset time if provided (using shared tracker)
+        if (reset) {
+          try {
+            const resetDate = new Date(reset);
+            rateLimitTracker.setResetTime(resetDate);
+          } catch (e) {
+            console.warn('Failed to parse rate limit reset time:', reset);
+          }
+        }
+        
         return response;
       },
       async (error) => {
@@ -118,7 +195,42 @@ export class RachioClient {
           const retryAfter = error.response.headers['retry-after'];
           const reset = error.response.headers['x-ratelimit-reset'];
           const remaining = error.response.headers['x-ratelimit-remaining'];
+          
           console.error(`Rachio API rate limit exceeded. Remaining: ${remaining}, Reset: ${reset}, Retry-After: ${retryAfter}`);
+          
+          // Store the reset time (using shared tracker)
+          let resetDate: Date | null = null;
+          if (reset) {
+            try {
+              resetDate = new Date(reset);
+              rateLimitTracker.setResetTime(resetDate);
+              console.log(`Rate limit will reset at: ${resetDate.toISOString()}`);
+            } catch (e) {
+              console.warn('Failed to parse rate limit reset time:', reset);
+              // Fallback to retry-after if available
+              if (retryAfter) {
+                const retryAfterSeconds = parseInt(retryAfter, 10);
+                if (!isNaN(retryAfterSeconds)) {
+                  resetDate = new Date(Date.now() + retryAfterSeconds * 1000);
+                  rateLimitTracker.setResetTime(resetDate);
+                }
+              }
+            }
+          } else if (retryAfter) {
+            // Fallback to retry-after header
+            const retryAfterSeconds = parseInt(retryAfter, 10);
+            if (!isNaN(retryAfterSeconds)) {
+              resetDate = new Date(Date.now() + retryAfterSeconds * 1000);
+              rateLimitTracker.setResetTime(resetDate);
+            }
+          }
+          
+          // Throw a custom error with reset time
+          throw new RachioRateLimitError(
+            `Rachio API rate limit exceeded. Resets at ${resetDate?.toISOString() || 'unknown time'}`,
+            resetDate,
+            remaining ? parseInt(remaining, 10) : null
+          );
         }
         return Promise.reject(error);
       }

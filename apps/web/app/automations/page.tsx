@@ -10,6 +10,10 @@ export default function AutomationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
+  const [rachioRateLimit, setRachioRateLimit] = useState<{
+    rateLimitReset: string | null;
+    message?: string;
+  } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
@@ -33,8 +37,20 @@ export default function AutomationsPage() {
       const { setAuthToken: setApiAuth } = await import('../../lib/api');
       setApiAuth(authToken);
 
-      const data = await automationApi.getRules();
-      setRules(data);
+      const response = await automationApi.getRules();
+      // Handle rate limit info if present
+      if (response && typeof response === 'object' && 'rateLimitError' in response) {
+        const rateLimitError = (response as any).rateLimitError;
+        setRachioRateLimit({
+          rateLimitReset: rateLimitError.rateLimitReset,
+          message: rateLimitError.message,
+        });
+        // Set rules from response (might be empty array if rate limited)
+        setRules((response as any).rules || []);
+      } else {
+        setRachioRateLimit(null);
+        setRules(response as AutomationRule[]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load rules');
     } finally {
@@ -166,6 +182,43 @@ export default function AutomationsPage() {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
               <p className="text-red-800 font-medium">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Rachio Rate Limit Info */}
+        {rachioRateLimit && (
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-blue-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-blue-800 font-medium mb-1">Rachio API Rate Limit Active</p>
+                <p className="text-blue-700 text-sm">
+                  {rachioRateLimit.rateLimitReset ? (
+                    <>
+                      Rachio schedules are temporarily unavailable. Rate limit will reset at{' '}
+                      <span className="font-semibold">
+                        {new Date(rachioRateLimit.rateLimitReset).toLocaleString()}
+                      </span>
+                      {' '}({(() => {
+                        const resetTime = new Date(rachioRateLimit.rateLimitReset);
+                        const now = new Date();
+                        const msUntilReset = resetTime.getTime() - now.getTime();
+                        const hoursUntilReset = Math.floor(msUntilReset / (1000 * 60 * 60));
+                        const minutesUntilReset = Math.floor((msUntilReset % (1000 * 60 * 60)) / (1000 * 60));
+                        if (hoursUntilReset > 0) {
+                          return `${hoursUntilReset}h ${minutesUntilReset}m`;
+                        }
+                        return `${minutesUntilReset}m`;
+                      })()} remaining)
+                    </>
+                  ) : (
+                    rachioRateLimit.message || 'Rachio schedules are temporarily unavailable. Please wait before refreshing.'
+                  )}
+                </p>
+              </div>
             </div>
           </div>
         )}

@@ -301,11 +301,26 @@ export const rachioApi = {
     const response = await api.post<{ success: boolean; message: string }>('/api/rachio/poll');
     return response.data;
   },
+
+  async getRateLimitStatus(): Promise<{
+    rateLimited: boolean;
+    resetTime: string | null;
+    remaining?: number | null;
+    message?: string;
+  }> {
+    const response = await api.get<{
+      rateLimited: boolean;
+      resetTime: string | null;
+      remaining?: number | null;
+      message?: string;
+    }>('/api/rachio/rate-limit-status');
+    return response.data;
+  },
 };
 
 export const automationApi = {
-  async getRules(): Promise<AutomationRule[]> {
-    const response = await api.get<AutomationRule[]>('/api/automations');
+  async getRules(): Promise<AutomationRule[] | { rules: AutomationRule[]; rateLimitError?: any }> {
+    const response = await api.get<AutomationRule[] | { rules: AutomationRule[]; rateLimitError?: any }>('/api/automations');
     return response.data;
   },
 
