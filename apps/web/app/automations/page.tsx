@@ -1304,11 +1304,12 @@ function RuleEditor({
         })));
         setSensorLogic(smCondition.logic || 'AND');
       } else {
-        // Old format
+        // Old format - TypeScript now knows this is the old format
+        const oldCondition = smCondition as { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
         setSoilMoistureMode('single');
         setSoilMoistureCondition({
-          operator: smCondition.operator || '',
-          value: smCondition.value?.toString() || '',
+          operator: oldCondition.operator || '',
+          value: oldCondition.value?.toString() || '',
         });
       }
     }
