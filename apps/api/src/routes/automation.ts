@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { evaluateRules } from '../automation/engine';
-import { RachioClient, RachioRateLimitError } from '../clients/rachio';
+import { RachioClient, RachioRateLimitError, getRachioRateLimitStatus } from '../clients/rachio';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -24,6 +24,25 @@ router.get('/', async (_req: Request, res: Response) => {
     const apiKey = process.env.RACHIO_API_KEY;
     
     if (apiKey) {
+      // Check rate limit BEFORE creating client or fetching devices
+      const rateLimitStatus = getRachioRateLimitStatus();
+      if (rateLimitStatus.rateLimited && rateLimitStatus.resetTime) {
+        // Return custom rules but include rate limit info - don't even try to fetch schedules
+        const customRulesWithSource = customRules.map(rule => ({
+          ...rule,
+          source: 'custom' as const,
+        }));
+        
+        return res.status(200).json({
+          rules: customRulesWithSource,
+          rateLimitError: {
+            rateLimitReset: rateLimitStatus.resetTime.toISOString(),
+            remaining: null,
+            message: `Rate limit active. Resets at ${rateLimitStatus.resetTime.toISOString()}`,
+          },
+        });
+      }
+
       try {
         const client = new RachioClient(apiKey);
         const devices = await prisma.rachioDevice.findMany();
@@ -78,12 +97,26 @@ router.get('/', async (_req: Request, res: Response) => {
             }));
             rachioSchedules.push(...transformedSchedules);
           } catch (error) {
-            // If rate limited, propagate the error with reset time
+            // If rate limited, stop trying other devices and return early
             if (error instanceof RachioRateLimitError) {
-              throw error;
+              // Don't log - this is expected when rate limited
+              // Return custom rules but include rate limit info
+              const customRulesWithSource = customRules.map(rule => ({
+                ...rule,
+                source: 'custom' as const,
+              }));
+              
+              return res.status(200).json({
+                rules: customRulesWithSource,
+                rateLimitError: {
+                  rateLimitReset: error.resetTime?.toISOString() || null,
+                  remaining: error.remaining,
+                  message: error.message,
+                },
+              });
             }
             console.error(`Error fetching schedules for device ${device.id}:`, error);
-            // Continue with other devices even if one fails
+            // Continue with other devices even if one fails (non-rate-limit errors)
           }
         }
       } catch (error) {

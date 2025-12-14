@@ -291,13 +291,31 @@ router.get('/schedules', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Rachio API key not configured' });
     }
 
+    // Check rate limit before attempting any API calls
+    const rateLimitStatus = getRachioRateLimitStatus();
+    if (rateLimitStatus.rateLimited && rateLimitStatus.resetTime) {
+      return res.status(429).json({
+        error: 'Rachio API rate limit exceeded',
+        rateLimitReset: rateLimitStatus.resetTime.toISOString(),
+        remaining: null,
+        message: `Rate limit active. Resets at ${rateLimitStatus.resetTime.toISOString()}`,
+      });
+    }
+
     const client = new RachioClient(apiKey);
     const deviceId = req.query.deviceId as string | undefined;
 
     if (deviceId) {
       // Fetch schedules for specific device
-      const schedules = await client.getSchedules(deviceId);
-      return res.json(schedules);
+      try {
+        const schedules = await client.getSchedules(deviceId);
+        return res.json(schedules);
+      } catch (error) {
+        if (handleRateLimitError(error, res)) {
+          return;
+        }
+        throw error;
+      }
     } else {
       // Fetch schedules for all devices
       const devices = await prisma.rachioDevice.findMany();
@@ -308,14 +326,28 @@ router.get('/schedules', async (req: Request, res: Response) => {
           const schedules = await client.getSchedules(device.id);
           allSchedules.push(...schedules);
         } catch (error) {
+          // If rate limited, stop trying other devices and return error
+          if (error instanceof RachioRateLimitError) {
+            // Don't log - this is expected when rate limited
+            return res.status(429).json({
+              error: 'Rachio API rate limit exceeded',
+              rateLimitReset: error.resetTime?.toISOString() || null,
+              remaining: error.remaining,
+              message: error.message,
+              schedules: allSchedules, // Return what we've fetched so far
+            });
+          }
           console.error(`Error fetching schedules for device ${device.id}:`, error);
-          // Continue with other devices even if one fails
+          // Continue with other devices even if one fails (non-rate-limit errors)
         }
       }
 
       return res.json(allSchedules);
     }
   } catch (error) {
+    if (handleRateLimitError(error, res)) {
+      return;
+    }
     console.error('Error fetching schedules:', error);
     return res.status(500).json({ error: 'Failed to fetch schedules' });
   }

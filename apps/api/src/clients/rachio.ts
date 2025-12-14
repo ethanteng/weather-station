@@ -156,14 +156,22 @@ export class RachioClient {
           if (resetTime) {
             const msUntilReset = resetTime.getTime() - Date.now();
             const minutesUntilReset = Math.ceil(msUntilReset / 60000);
+            const hoursUntilReset = Math.floor(minutesUntilReset / 60);
+            const remainingMinutes = minutesUntilReset % 60;
+            const timeStr = hoursUntilReset > 0 
+              ? `${hoursUntilReset}h ${remainingMinutes}m`
+              : `${remainingMinutes}m`;
             throw new RachioRateLimitError(
-              `Rate limit still active. Resets in ${minutesUntilReset} minute(s)`,
+              `Rate limit still active. Resets in ${timeStr}`,
               resetTime,
               null
             );
           }
         }
         return config;
+      },
+      (error) => {
+        return Promise.reject(error);
       }
     );
 
@@ -259,6 +267,10 @@ export class RachioClient {
       
       return response.data;
     } catch (error) {
+      // Don't wrap or log RachioRateLimitError - let it propagate
+      if (error instanceof RachioRateLimitError) {
+        throw error;
+      }
       console.error('Error fetching Rachio person:', error);
       throw new Error(`Failed to fetch Rachio person: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -277,6 +289,10 @@ export class RachioClient {
 
       return response.data?.devices || [];
     } catch (error) {
+      // Don't wrap or log RachioRateLimitError - let it propagate
+      if (error instanceof RachioRateLimitError) {
+        throw error;
+      }
       console.error('Error fetching Rachio devices:', error);
       throw new Error(`Failed to fetch Rachio devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -292,6 +308,10 @@ export class RachioClient {
 
       return response.data?.zones || [];
     } catch (error) {
+      // Don't wrap or log RachioRateLimitError - let it propagate
+      if (error instanceof RachioRateLimitError) {
+        throw error;
+      }
       console.error(`Error fetching Rachio zones for device ${deviceId}:`, error);
       throw new Error(`Failed to fetch Rachio zones: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -444,6 +464,10 @@ export class RachioClient {
         };
       });
     } catch (error) {
+      // Don't wrap RachioRateLimitError - let it propagate as-is
+      if (error instanceof RachioRateLimitError) {
+        throw error;
+      }
       console.error(`Error fetching schedules for device ${deviceId}:`, error);
       throw new Error(`Failed to fetch schedules: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
