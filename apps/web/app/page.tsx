@@ -173,7 +173,11 @@ export default function Dashboard() {
               <p className="text-slate-600 text-base sm:text-lg">Real-time weather monitoring and automated irrigation management</p>
             </div>
             {/* Subtle API rate limit indicator */}
-            {rachioRateLimit && rachioRateLimit.remaining !== null && rachioRateLimit.limit !== null && (
+            {rachioRateLimit && 
+             rachioRateLimit.remaining !== null && 
+             rachioRateLimit.remaining !== undefined &&
+             rachioRateLimit.limit !== null && 
+             rachioRateLimit.limit !== undefined && (
               <div className="text-xs text-slate-400 mt-1 whitespace-nowrap">
                 <span className="font-mono">
                   {rachioRateLimit.remaining.toLocaleString()}/{rachioRateLimit.limit.toLocaleString()}

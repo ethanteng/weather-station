@@ -103,7 +103,6 @@ class RachioRateLimitTracker {
   private rateLimitResetTime: Date | null = null;
   private rateLimitRemaining: number | null = null;
   private rateLimitLimit: number | null = null;
-  private lastUpdated: Date | null = null;
 
   setResetTime(resetTime: Date | null): void {
     this.rateLimitResetTime = resetTime;
@@ -112,7 +111,6 @@ class RachioRateLimitTracker {
   setRateLimitInfo(remaining: number | null, limit: number | null): void {
     this.rateLimitRemaining = remaining;
     this.rateLimitLimit = limit;
-    this.lastUpdated = new Date();
   }
 
   getResetTime(): Date | null {
