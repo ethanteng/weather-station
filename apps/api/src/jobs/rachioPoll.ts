@@ -16,8 +16,18 @@ export async function pollRachioData(): Promise<void> {
   try {
     console.log('Starting Rachio data poll...');
 
-    // Get all devices
-    const devices = await client.getDevices();
+    // Get all devices with retry logic for rate limits
+    let devices;
+    try {
+      devices = await client.getDevices();
+    } catch (error: any) {
+      // If we hit a rate limit, log and skip this poll
+      if (error.message?.includes('429') || error.response?.status === 429) {
+        console.warn('Rachio API rate limit hit, skipping this poll cycle');
+        return;
+      }
+      throw error;
+    }
 
     if (devices.length === 0) {
       console.warn('No Rachio devices found');

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { RachioClient } from '../clients/rachio';
+import { pollRachioData } from '../jobs/rachioPoll';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -408,6 +409,24 @@ router.put('/schedules/:id/skip', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error skipping schedule:', error);
     return res.status(500).json({ error: 'Failed to skip schedule' });
+  }
+});
+
+/**
+ * POST /api/rachio/poll
+ * Manually trigger a Rachio data poll
+ */
+router.post('/poll', async (_req: Request, res: Response) => {
+  try {
+    console.log('Manual Rachio poll triggered via API');
+    await pollRachioData();
+    return res.json({ success: true, message: 'Rachio data poll completed' });
+  } catch (error) {
+    console.error('Error in manual Rachio poll:', error);
+    return res.status(500).json({ 
+      error: 'Failed to poll Rachio data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

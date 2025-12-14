@@ -296,6 +296,11 @@ export const rachioApi = {
   async skipSchedule(id: string): Promise<void> {
     await api.put(`/api/rachio/schedules/${id}/skip`);
   },
+
+  async poll(): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/rachio/poll');
+    return response.data;
+  },
 };
 
 export const automationApi = {

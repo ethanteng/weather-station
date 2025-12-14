@@ -19,8 +19,9 @@ export function startScheduler(): void {
     timezone: 'America/Los_Angeles', // Adjust as needed
   });
 
-  // Rachio polling: every 15 minutes
-  rachioJob = cron.schedule('*/15 * * * *', async () => {
+  // Rachio polling: every 6 hours (reduced to avoid rate limits)
+  // Rachio API allows 3,500 requests/day. At 6hr intervals = 4 requests/day for polling
+  rachioJob = cron.schedule('0 */6 * * *', async () => {
     console.log('Running Rachio poll job...');
     await pollRachioData();
   }, {
@@ -39,7 +40,7 @@ export function startScheduler(): void {
 
   console.log('Job scheduler started');
   console.log('  - Weather poll: every 5 minutes');
-  console.log('  - Rachio poll: every 15 minutes');
+  console.log('  - Rachio poll: every 6 hours');
   console.log('  - Automation evaluation: every 5 minutes');
 }
 

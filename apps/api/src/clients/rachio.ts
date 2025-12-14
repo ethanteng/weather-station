@@ -89,6 +89,8 @@ export interface RachioSchedule {
 
 export class RachioClient {
   private client: AxiosInstance;
+  private cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
+  private readonly PERSON_CACHE_TTL = 60 * 60 * 1000; // 1 hour cache
 
   constructor(apiKey: string) {
 
@@ -100,15 +102,49 @@ export class RachioClient {
         'Content-Type': 'application/json',
       },
     });
+
+    // Add response interceptor to log rate limit headers
+    this.client.interceptors.response.use(
+      (response) => {
+        const remaining = response.headers['x-ratelimit-remaining'];
+        const limit = response.headers['x-ratelimit-limit'];
+        if (remaining !== undefined && parseInt(remaining) < 100) {
+          console.warn(`Rachio API rate limit warning: ${remaining}/${limit} requests remaining`);
+        }
+        return response;
+      },
+      async (error) => {
+        if (error.response?.status === 429) {
+          const retryAfter = error.response.headers['retry-after'];
+          const reset = error.response.headers['x-ratelimit-reset'];
+          const remaining = error.response.headers['x-ratelimit-remaining'];
+          console.error(`Rachio API rate limit exceeded. Remaining: ${remaining}, Reset: ${reset}, Retry-After: ${retryAfter}`);
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
    * Get person information (authenticated user)
+   * Cached for 1 hour to reduce API calls
    */
   async getPerson(): Promise<RachioPerson> {
+    // Check cache first
+    if (this.cachedPerson && Date.now() - this.cachedPerson.timestamp < this.PERSON_CACHE_TTL) {
+      return this.cachedPerson.data;
+    }
+
     try {
       const response = await this.client.get('/person/info');
       console.log('Rachio person response:', JSON.stringify(response.data, null, 2));
+      
+      // Cache the result
+      this.cachedPerson = {
+        data: response.data,
+        timestamp: Date.now(),
+      };
+      
       return response.data;
     } catch (error) {
       console.error('Error fetching Rachio person:', error);
