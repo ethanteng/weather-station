@@ -11,16 +11,17 @@ datasource db {
 }
 
 model WeatherReading {
-  id            String   @id @default(cuid())
-  timestamp     DateTime @default(now()) @db.Timestamptz(6)
-  temperature   Float?
-  humidity      Float?
-  pressure      Float?
-  rain1h        Float?   @map("rain_1h")
-  rain24h       Float?   @map("rain_24h")
-  rainTotal     Float?   @map("rain_total")
-  soilMoisture  Float?   @map("soil_moisture")
-  rawPayload    Json     @map("raw_payload")
+  id                 String   @id @default(cuid())
+  timestamp          DateTime @default(now()) @db.Timestamptz(6)
+  temperature        Float?
+  humidity           Float?
+  pressure           Float?
+  rain1h             Float?   @map("rain_1h")
+  rain24h            Float?   @map("rain_24h")
+  rainTotal          Float?   @map("rain_total")
+  soilMoisture       Float?   @map("soil_moisture") // Deprecated: use soilMoistureValues
+  soilMoistureValues Json?    @map("soil_moisture_values") // JSON: { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
+  rawPayload         Json     @map("raw_payload")
 
   @@index([timestamp])
   @@map("weather_readings")
@@ -97,5 +98,18 @@ model AuditLog {
 
   @@index([timestamp])
   @@map("audit_logs")
+}
+
+model SoilMoistureSensor {
+  id        String   @id @default(cuid())
+  channel   Int      @unique // 1-16, corresponds to soil_ch1 through soil_ch16
+  name      String   // Custom name for the sensor
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([channel])
+  @@index([enabled])
+  @@map("soil_moisture_sensors")
 }
 

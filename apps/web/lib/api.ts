@@ -68,7 +68,8 @@ export interface WeatherReading {
   rain1h: number | null;
   rain24h: number | null;
   rainTotal: number | null;
-  soilMoisture: number | null;
+  soilMoisture: number | null; // Deprecated: use soilMoistureValues
+  soilMoistureValues?: Record<string, number> | null; // { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
 }
 
 export interface WeatherSummary {
@@ -178,13 +179,26 @@ export interface RachioSchedule {
   externalName?: string; // External name for the schedule
 }
 
+export interface SoilMoistureSensorCondition {
+  channel: number; // 1-16
+  operator: '>=' | '<=' | '>' | '<' | '==';
+  value: number;
+}
+
+export interface SoilMoistureCondition {
+  sensors: SoilMoistureSensorCondition[];
+  logic?: 'AND' | 'OR'; // Default: AND
+}
+
 export interface AutomationRule {
   id: string;
   name: string;
   enabled: boolean;
   conditions: {
     rain24h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
-    soilMoisture?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    soilMoisture?: 
+      | { operator: '>=' | '<=' | '>' | '<' | '=='; value: number } // Old format (backward compatibility)
+      | SoilMoistureCondition; // New format (multiple sensors)
     rain1h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
     temperature?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
     humidity?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
@@ -356,6 +370,43 @@ export const forecastApi = {
       params,
     });
     return response.data;
+  },
+};
+
+export interface SoilMoistureSensor {
+  id: string;
+  channel: number; // 1-16
+  name: string;
+  enabled: boolean;
+  currentValue?: number | null;
+  lastReadingAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const sensorApi = {
+  async getSensors(): Promise<SoilMoistureSensor[]> {
+    const response = await api.get<SoilMoistureSensor[]>('/api/sensors');
+    return response.data;
+  },
+
+  async getSensor(id: string): Promise<SoilMoistureSensor> {
+    const response = await api.get<SoilMoistureSensor>(`/api/sensors/${id}`);
+    return response.data;
+  },
+
+  async createSensor(data: { channel: number; name?: string; enabled?: boolean }): Promise<SoilMoistureSensor> {
+    const response = await api.post<SoilMoistureSensor>('/api/sensors', data);
+    return response.data;
+  },
+
+  async updateSensor(id: string, data: { name?: string; enabled?: boolean }): Promise<SoilMoistureSensor> {
+    const response = await api.put<SoilMoistureSensor>(`/api/sensors/${id}`, data);
+    return response.data;
+  },
+
+  async deleteSensor(id: string): Promise<void> {
+    await api.delete(`/api/sensors/${id}`);
   },
 };
 

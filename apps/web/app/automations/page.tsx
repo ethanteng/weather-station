@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { automationApi, AutomationRule, rachioApi, RachioZone } from '../../lib/api';
+import { automationApi, AutomationRule, rachioApi, RachioZone, sensorApi, SoilMoistureSensor, SoilMoistureCondition, SoilMoistureSensorCondition } from '../../lib/api';
 import Link from 'next/link';
 
 export default function AutomationsPage() {
@@ -135,6 +135,15 @@ export default function AutomationsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
                 Dashboard
+              </Link>
+              <Link
+                href="/sensors"
+                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Sensors
               </Link>
               <button
                 onClick={() => setEditingId('new')}
@@ -581,11 +590,25 @@ function RuleView({
       });
     }
     if (rule.conditions.soilMoisture) {
-      conditions.push({
-        label: 'Soil Moisture',
-        value: `${rule.conditions.soilMoisture.operator} ${rule.conditions.soilMoisture.value}%`,
-        icon: '🌱',
-      });
+      // Check if it's the new format (has sensors array)
+      if ('sensors' in rule.conditions.soilMoisture && Array.isArray(rule.conditions.soilMoisture.sensors)) {
+        const sensorCondition = rule.conditions.soilMoisture as SoilMoistureCondition;
+        const sensorStrings = sensorCondition.sensors.map(s => `Sensor ${s.channel} ${s.operator} ${s.value}%`);
+        const logic = sensorCondition.logic || 'AND';
+        conditions.push({
+          label: 'Soil Moisture',
+          value: sensorStrings.join(` ${logic} `),
+          icon: '🌱',
+        });
+      } else {
+        // Old format
+        const oldCondition = rule.conditions.soilMoisture as { operator: string; value: number };
+        conditions.push({
+          label: 'Soil Moisture',
+          value: `${oldCondition.operator} ${oldCondition.value}%`,
+          icon: '🌱',
+        });
+      }
     }
     if (rule.conditions.rain1h) {
       conditions.push({
@@ -1158,6 +1181,12 @@ function RuleEditor({
   const [zones, setZones] = useState<RachioZone[]>([]);
   const [zoneDeviceMap, setZoneDeviceMap] = useState<Map<string, string>>(new Map()); // zoneId -> deviceName
   const [loadingZones, setLoadingZones] = useState(false);
+  const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
+  const [loadingSensors, setLoadingSensors] = useState(false);
+  const [soilMoistureMode, setSoilMoistureMode] = useState<'single' | 'multi'>('single');
+  const [soilMoistureCondition, setSoilMoistureCondition] = useState<{ operator: string; value: string }>({ operator: '', value: '' });
+  const [selectedSensors, setSelectedSensors] = useState<Array<{ channel: number; operator: string; value: string }>>([]);
+  const [sensorLogic, setSensorLogic] = useState<'AND' | 'OR'>('AND');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1172,11 +1201,41 @@ function RuleEditor({
       return;
     }
 
+    // Build final conditions with soil moisture condition
+    const finalConditions = { ...conditions };
+    
+    if (soilMoistureMode === 'multi') {
+      // Multi-sensor format
+      const validSensors = selectedSensors.filter(s => s.channel && s.operator && s.value);
+      if (validSensors.length > 0) {
+        finalConditions.soilMoisture = {
+          sensors: validSensors.map(s => ({
+            channel: s.channel,
+            operator: s.operator as any,
+            value: parseFloat(s.value),
+          })),
+          logic: sensorLogic,
+        };
+      } else {
+        delete finalConditions.soilMoisture;
+      }
+    } else {
+      // Single sensor format (backward compatibility)
+      if (soilMoistureCondition.operator && soilMoistureCondition.value) {
+        finalConditions.soilMoisture = {
+          operator: soilMoistureCondition.operator as any,
+          value: parseFloat(soilMoistureCondition.value),
+        };
+      } else {
+        delete finalConditions.soilMoisture;
+      }
+    }
+
     const ruleData: AutomationRule = {
       id: rule?.id || '',
       name,
       enabled,
-      conditions,
+      conditions: finalConditions,
       actions,
       createdAt: rule?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1186,10 +1245,25 @@ function RuleEditor({
   };
 
   const updateCondition = (field: string, operator: string, value: string) => {
-    setConditions({
-      ...conditions,
-      [field]: value ? { operator: operator as any, value: parseFloat(value) } : undefined,
-    });
+    if (field === 'soilMoisture') {
+      // Handle soil moisture condition separately
+      setSoilMoistureCondition({ operator, value });
+      if (value && operator) {
+        setConditions({
+          ...conditions,
+          soilMoisture: { operator: operator as any, value: parseFloat(value) },
+        });
+      } else {
+        const newConditions = { ...conditions };
+        delete newConditions.soilMoisture;
+        setConditions(newConditions);
+      }
+    } else {
+      setConditions({
+        ...conditions,
+        [field]: value ? { operator: operator as any, value: parseFloat(value) } : undefined,
+      });
+    }
   };
 
   const removeCondition = (field: string) => {
@@ -1197,6 +1271,48 @@ function RuleEditor({
     delete newConditions[field as keyof typeof conditions];
     setConditions(newConditions);
   };
+
+  // Fetch sensors on component mount
+  useEffect(() => {
+    const fetchSensors = async () => {
+      setLoadingSensors(true);
+      try {
+        const sensorData = await sensorApi.getSensors();
+        setSensors(sensorData.filter(s => s.enabled));
+      } catch (error) {
+        console.error('Error fetching sensors:', error);
+        setSensors([]);
+      } finally {
+        setLoadingSensors(false);
+      }
+    };
+
+    fetchSensors();
+  }, []);
+
+  // Initialize soil moisture condition from existing rule
+  useEffect(() => {
+    if (rule?.conditions?.soilMoisture) {
+      const smCondition = rule.conditions.soilMoisture;
+      // Check if it's the new format (has sensors array)
+      if ('sensors' in smCondition && Array.isArray(smCondition.sensors)) {
+        setSoilMoistureMode('multi');
+        setSelectedSensors(smCondition.sensors.map(s => ({
+          channel: s.channel,
+          operator: s.operator,
+          value: s.value.toString(),
+        })));
+        setSensorLogic(smCondition.logic || 'AND');
+      } else {
+        // Old format
+        setSoilMoistureMode('single');
+        setSoilMoistureCondition({
+          operator: smCondition.operator || '',
+          value: smCondition.value?.toString() || '',
+        });
+      }
+    }
+  }, [rule]);
 
   // Fetch zones when run_zone action is selected
   useEffect(() => {
@@ -1298,6 +1414,190 @@ function RuleEditor({
         </div>
         <div className="space-y-3">
           {conditionFields.map((field) => {
+            // Special handling for soilMoisture field
+            if (field.key === 'soilMoisture') {
+              return (
+                <div key={field.key} className="bg-white p-4 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xl">{field.icon}</span>
+                    <span className="text-sm font-medium text-slate-700">{field.label}:</span>
+                    <div className="flex-1"></div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSoilMoistureMode('single')}
+                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                          soilMoistureMode === 'single'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Single Sensor
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSoilMoistureMode('multi')}
+                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                          soilMoistureMode === 'multi'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Multiple Sensors
+                      </button>
+                    </div>
+                  </div>
+
+                  {soilMoistureMode === 'single' ? (
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={soilMoistureCondition.operator}
+                        onChange={(e) => {
+                          const newCondition = { ...soilMoistureCondition, operator: e.target.value };
+                          setSoilMoistureCondition(newCondition);
+                          if (e.target.value && newCondition.value) {
+                            updateCondition('soilMoisture', e.target.value, newCondition.value);
+                          } else {
+                            removeCondition('soilMoisture');
+                          }
+                        }}
+                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      >
+                        <option value="">Not used</option>
+                        <option value=">=">≥ (Greater than or equal)</option>
+                        <option value="<=">≤ (Less than or equal)</option>
+                        <option value=">">&gt; (Greater than)</option>
+                        <option value="<">&lt; (Less than)</option>
+                        <option value="==">= (Equal to)</option>
+                      </select>
+                      {soilMoistureCondition.operator && (
+                        <>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={soilMoistureCondition.value}
+                            onChange={(e) => {
+                              const newCondition = { ...soilMoistureCondition, value: e.target.value };
+                              setSoilMoistureCondition(newCondition);
+                              if (newCondition.operator && e.target.value) {
+                                updateCondition('soilMoisture', newCondition.operator, e.target.value);
+                              } else {
+                                removeCondition('soilMoisture');
+                              }
+                            }}
+                            className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-slate-600 font-medium w-8">{field.unit}</span>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {loadingSensors ? (
+                        <div className="text-sm text-slate-500 py-2">Loading sensors...</div>
+                      ) : sensors.length === 0 ? (
+                        <div className="text-sm text-amber-600 py-2 bg-amber-50 border border-amber-200 rounded-lg px-3">
+                          No sensors available. Make sure sensors are enabled in the Sensors page.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            {selectedSensors.map((sensorCond, idx) => {
+                              const sensor = sensors.find(s => s.channel === sensorCond.channel);
+                              return (
+                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                                  <select
+                                    value={sensorCond.channel || ''}
+                                    onChange={(e) => {
+                                      const newSensors = [...selectedSensors];
+                                      newSensors[idx] = { ...newSensors[idx], channel: parseInt(e.target.value) };
+                                      setSelectedSensors(newSensors);
+                                    }}
+                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Select sensor...</option>
+                                    {sensors.map(s => (
+                                      <option key={s.id} value={s.channel}>
+                                        {s.name} (Channel {s.channel})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={sensorCond.operator}
+                                    onChange={(e) => {
+                                      const newSensors = [...selectedSensors];
+                                      newSensors[idx] = { ...newSensors[idx], operator: e.target.value };
+                                      setSelectedSensors(newSensors);
+                                    }}
+                                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Operator</option>
+                                    <option value=">=">≥</option>
+                                    <option value="<=">≤</option>
+                                    <option value=">">&gt;</option>
+                                    <option value="<">&lt;</option>
+                                    <option value="==">=</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    value={sensorCond.value}
+                                    onChange={(e) => {
+                                      const newSensors = [...selectedSensors];
+                                      newSensors[idx] = { ...newSensors[idx], value: e.target.value };
+                                      setSelectedSensors(newSensors);
+                                    }}
+                                    className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-sm text-slate-600 font-medium">{field.unit}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedSensors(selectedSensors.filter((_, i) => i !== idx));
+                                    }}
+                                    className="px-2 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSensors([...selectedSensors, { channel: 0, operator: '', value: '' }]);
+                              }}
+                              className="px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                            >
+                              + Add Sensor
+                            </button>
+                            {selectedSensors.length > 1 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-slate-600">Logic:</span>
+                                <select
+                                  value={sensorLogic}
+                                  onChange={(e) => setSensorLogic(e.target.value as 'AND' | 'OR')}
+                                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="AND">AND (all must meet)</option>
+                                  <option value="OR">OR (any can meet)</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Regular condition fields
             const condition = conditions[field.key];
             return (
               <div key={field.key} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">

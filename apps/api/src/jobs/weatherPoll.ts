@@ -56,16 +56,54 @@ export async function pollWeatherData(): Promise<void> {
         rain1h: parsed.rain1h,
         rain24h: parsed.rain24h,
         rainTotal: parsed.rainTotal,
-        soilMoisture: parsed.soilMoisture,
+        soilMoisture: parsed.soilMoisture, // Backward compatibility
+        soilMoistureValues: parsed.soilMoistureValues || null,
         rawPayload: deviceData as unknown as object,
       },
     });
+
+    // Create/update SoilMoistureSensor records for detected sensors
+    if (parsed.soilMoistureValues) {
+      for (const [channelKey, value] of Object.entries(parsed.soilMoistureValues)) {
+        // Extract channel number from "soil_ch1" -> 1
+        const channelMatch = channelKey.match(/soil_ch(\d+)/);
+        if (channelMatch) {
+          const channel = parseInt(channelMatch[1], 10);
+          
+          // Check if sensor already exists
+          const existingSensor = await prisma.soilMoistureSensor.findUnique({
+            where: { channel },
+          });
+
+          if (existingSensor) {
+            // Update existing sensor (keep name and enabled status)
+            await prisma.soilMoistureSensor.update({
+              where: { channel },
+              data: {
+                updatedAt: new Date(),
+              },
+            });
+          } else {
+            // Create new sensor with default name
+            await prisma.soilMoistureSensor.create({
+              data: {
+                channel,
+                name: `Soil Sensor ${channel}`,
+                enabled: true,
+              },
+            });
+            console.log(`Created new soil moisture sensor: channel ${channel}`);
+          }
+        }
+      }
+    }
 
     console.log('Weather data poll completed successfully', {
       temperature: parsed.temperature,
       humidity: parsed.humidity,
       rain24h: parsed.rain24h,
       soilMoisture: parsed.soilMoisture,
+      soilMoistureSensors: parsed.soilMoistureValues ? Object.keys(parsed.soilMoistureValues).length : 0,
     });
   } catch (error) {
     console.error('Error polling weather data:', error);

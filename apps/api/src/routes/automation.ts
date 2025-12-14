@@ -129,6 +129,52 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 /**
+ * Validate sensor condition format
+ */
+function validateSensorCondition(condition: any): boolean {
+  if (!condition || typeof condition !== 'object') {
+    return false;
+  }
+
+  // Check if it's the new format (has sensors array)
+  if ('sensors' in condition) {
+    if (!Array.isArray(condition.sensors) || condition.sensors.length === 0) {
+      return false;
+    }
+
+    // Validate each sensor condition
+    for (const sensor of condition.sensors) {
+      if (
+        typeof sensor.channel !== 'number' ||
+        sensor.channel < 1 ||
+        sensor.channel > 16 ||
+        !['>=', '<=', '>', '<', '=='].includes(sensor.operator) ||
+        typeof sensor.value !== 'number'
+      ) {
+        return false;
+      }
+    }
+
+    // Validate logic operator if present
+    if (condition.logic && !['AND', 'OR'].includes(condition.logic)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Old format: single condition with operator and value
+  if (
+    !['>=', '<=', '>', '<', '=='].includes(condition.operator) ||
+    typeof condition.value !== 'number'
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * POST /api/automations
  * Create a new automation rule
  */
@@ -138,6 +184,13 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (!name || !conditions || !actions) {
       return res.status(400).json({ error: 'Missing required fields: name, conditions, actions' });
+    }
+
+    // Validate soilMoisture condition format if present
+    if (conditions.soilMoisture && !validateSensorCondition(conditions.soilMoisture)) {
+      return res.status(400).json({ 
+        error: 'Invalid soilMoisture condition format. Must be { operator, value } or { sensors: [{ channel, operator, value }], logic?: "AND"|"OR" }' 
+      });
     }
 
     const rule = await prisma.automationRule.create({
@@ -184,7 +237,15 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     if (name !== undefined) updateData.name = name;
     if (enabled !== undefined) updateData.enabled = enabled;
-    if (conditions !== undefined) updateData.conditions = conditions as object;
+    if (conditions !== undefined) {
+      // Validate soilMoisture condition format if present
+      if (conditions.soilMoisture && !validateSensorCondition(conditions.soilMoisture)) {
+        return res.status(400).json({ 
+          error: 'Invalid soilMoisture condition format. Must be { operator, value } or { sensors: [{ channel, operator, value }], logic?: "AND"|"OR" }' 
+        });
+      }
+      updateData.conditions = conditions as object;
+    }
     if (actions !== undefined) updateData.actions = actions as object;
 
     const rule = await prisma.automationRule.update({

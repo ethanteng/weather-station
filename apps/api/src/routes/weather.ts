@@ -96,7 +96,8 @@ router.get('/summary', async (req: Request, res: Response) => {
         humidity: latest.humidity,
         pressure: latest.pressure,
         rain24h: latest.rain24h,
-        soilMoisture: latest.soilMoisture,
+        soilMoisture: latest.soilMoisture, // Backward compatibility
+        soilMoistureValues: latest.soilMoistureValues,
       },
       avgTemperature: temps.length > 0 ? temps.reduce((a, b) => a + b, 0) / temps.length : null,
       avgHumidity: humidities.length > 0 ? humidities.reduce((a, b) => a + b, 0) / humidities.length : null,
@@ -110,7 +111,8 @@ router.get('/summary', async (req: Request, res: Response) => {
         humidity: r.humidity,
         pressure: r.pressure,
         rain24h: r.rain24h,
-        soilMoisture: r.soilMoisture,
+        soilMoisture: r.soilMoisture, // Backward compatibility
+        soilMoistureValues: r.soilMoistureValues,
       })),
     });
   } catch (error) {

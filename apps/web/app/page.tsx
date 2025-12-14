@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { weatherApi, rachioApi, automationApi, wateringApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule } from '../lib/api';
+import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { SoilMoistureChart } from '../components/SoilMoistureChart';
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [devices, setDevices] = useState<RachioDevice[]>([]);
   const [wateringEvents, setWateringEvents] = useState<WateringEvent[]>([]);
   const [automations, setAutomations] = useState<AutomationRule[]>([]);
+  const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
@@ -40,13 +41,14 @@ export default function Dashboard() {
       const { setAuthToken: setApiAuth } = await import('../lib/api');
       setApiAuth(authToken);
 
-      const [latest, summary24h, summary7d, rachioDevices, automationRules, events] = await Promise.all([
+      const [latest, summary24h, summary7d, rachioDevices, automationRules, events, sensorData] = await Promise.all([
         weatherApi.getLatest().catch(() => null),
         weatherApi.getSummary('24h').catch(() => null),
         weatherApi.getSummary('7d').catch(() => null),
         rachioApi.getDevices().catch(() => []),
         automationApi.getRules().catch(() => []),
         wateringApi.getEvents(10).catch(() => []),
+        sensorApi.getSensors().catch(() => []),
       ]);
 
       setLatestWeather(latest);
@@ -55,6 +57,7 @@ export default function Dashboard() {
       setDevices(rachioDevices);
       setAutomations(automationRules);
       setWateringEvents(events);
+      setSensors(sensorData.filter(s => s.enabled));
 
       setLoading(false);
     } catch (err) {
@@ -201,31 +204,82 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Soil Moisture Card */}
+          {/* Soil Moisture Sensors */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
             <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🌱</span>
-                <h2 className="text-xl font-semibold text-white">Soil Moisture</h2>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🌱</span>
+                  <h2 className="text-xl font-semibold text-white">Soil Moisture Sensors</h2>
+                </div>
+                <Link
+                  href="/sensors"
+                  className="text-sm text-white/90 hover:text-white underline"
+                >
+                  Manage Sensors
+                </Link>
               </div>
             </div>
             <div className="p-6">
-              <div className="text-center p-6 bg-green-50 rounded-lg border border-green-100 mb-6">
-                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Current Level</div>
-                <div className="text-4xl font-bold text-green-700 mb-2">
-                  {latestWeather && latestWeather.soilMoisture !== null ? `${latestWeather.soilMoisture.toFixed(1)}%` : 'N/A'}
+              {sensors.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {sensors.map((sensor) => {
+                    const channelKey = `soil_ch${sensor.channel}`;
+                    const currentValue = latestWeather?.soilMoistureValues?.[channelKey] ?? sensor.currentValue;
+                    return (
+                      <div
+                        key={sensor.id}
+                        className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200 p-4"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-900">{sensor.name}</h3>
+                            <p className="text-xs text-slate-600">Channel {sensor.channel}</p>
+                          </div>
+                          {currentValue !== null && currentValue !== undefined && (
+                            <div className={`px-2 py-1 rounded text-xs font-bold ${
+                              currentValue < 30 ? 'bg-red-100 text-red-700' :
+                              currentValue < 50 ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {currentValue < 30 ? 'Dry' : currentValue < 50 ? 'Moderate' : 'Wet'}
+                            </div>
+                          )}
+                        </div>
+                        {currentValue !== null && currentValue !== undefined ? (
+                          <>
+                            <div className="text-3xl font-bold text-green-700 mb-2">
+                              {currentValue.toFixed(1)}%
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(0, currentValue))}%` }}
+                              ></div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-slate-400 italic text-sm">No data available</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                {latestWeather && latestWeather.soilMoisture !== null && (
-                  <div className="w-full bg-slate-200 rounded-full h-3 mt-4">
-                    <div
-                      className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, Math.max(0, latestWeather.soilMoisture))}%` }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-              {weather24h && weather24h.readings.length > 0 && (
-                <SoilMoistureChart data={weather24h.readings} />
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-slate-400 mb-2">No sensors configured</div>
+                  <Link
+                    href="/sensors"
+                    className="text-sm text-blue-600 hover:text-blue-700 underline"
+                  >
+                    Go to Sensors page to configure
+                  </Link>
+                </div>
+              )}
+              {sensors.length > 0 && weather24h && weather24h.readings.length > 0 && (
+                <div className="mt-6">
+                  <SoilMoistureChart data={weather24h.readings} />
+                </div>
               )}
             </div>
           </div>

@@ -17,9 +17,20 @@ interface Condition {
   value: number;
 }
 
+interface SoilMoistureSensorCondition {
+  channel: number; // 1-16
+  operator: '>=' | '<=' | '>' | '<' | '==';
+  value: number;
+}
+
+interface SoilMoistureCondition {
+  sensors: SoilMoistureSensorCondition[];
+  logic?: 'AND' | 'OR'; // Default: AND (all sensors must meet condition)
+}
+
 interface Conditions {
   rain24h?: Condition;
-  soilMoisture?: Condition;
+  soilMoisture?: Condition | SoilMoistureCondition; // Support both old format (single sensor) and new format (multiple sensors)
   rain1h?: Condition;
   temperature?: Condition;
   humidity?: Condition;
@@ -68,6 +79,59 @@ function evaluateCondition(
 }
 
 /**
+ * Evaluate soil moisture sensor conditions
+ */
+function evaluateSoilMoistureCondition(
+  condition: SoilMoistureCondition,
+  soilMoistureValues: Record<string, number> | null
+): boolean {
+  if (!soilMoistureValues || condition.sensors.length === 0) {
+    return false;
+  }
+
+  const logic = condition.logic || 'AND';
+  const results: boolean[] = [];
+
+  for (const sensorCondition of condition.sensors) {
+    const channelKey = `soil_ch${sensorCondition.channel}`;
+    const sensorValue = soilMoistureValues[channelKey];
+
+    if (sensorValue === undefined || sensorValue === null) {
+      results.push(false);
+      continue;
+    }
+
+    let result = false;
+    switch (sensorCondition.operator) {
+      case '>=':
+        result = sensorValue >= sensorCondition.value;
+        break;
+      case '<=':
+        result = sensorValue <= sensorCondition.value;
+        break;
+      case '>':
+        result = sensorValue > sensorCondition.value;
+        break;
+      case '<':
+        result = sensorValue < sensorCondition.value;
+        break;
+      case '==':
+        result = sensorValue === sensorCondition.value;
+        break;
+    }
+    results.push(result);
+  }
+
+  // Apply logic operator
+  if (logic === 'OR') {
+    return results.some(r => r === true);
+  } else {
+    // AND logic (default)
+    return results.every(r => r === true);
+  }
+}
+
+/**
  * Evaluate all conditions for a rule
  */
 function evaluateConditions(
@@ -78,12 +142,31 @@ function evaluateConditions(
     rain1h: number | null;
     temperature: number | null;
     humidity: number | null;
-  }
+  },
+  soilMoistureValues?: Record<string, number> | null
 ): boolean {
   // All conditions must be true (AND logic)
   for (const [field, condition] of Object.entries(conditions)) {
-    if (!evaluateCondition(field as keyof Conditions, condition as Condition, weather)) {
-      return false;
+    // Special handling for soilMoisture condition (can be old or new format)
+    if (field === 'soilMoisture') {
+      // Check if it's the new format (has sensors array)
+      if (condition && typeof condition === 'object' && 'sensors' in condition) {
+        const sensorCondition = condition as SoilMoistureCondition;
+        if (!evaluateSoilMoistureCondition(sensorCondition, soilMoistureValues || null)) {
+          return false;
+        }
+      } else {
+        // Old format: single sensor condition (backward compatibility)
+        const oldCondition = condition as Condition;
+        if (!evaluateCondition('soilMoisture', oldCondition, weather)) {
+          return false;
+        }
+      }
+    } else {
+      // Regular condition evaluation
+      if (!evaluateCondition(field as keyof Conditions, condition as Condition, weather)) {
+        return false;
+      }
     }
   }
   return true;
@@ -299,6 +382,11 @@ export async function evaluateRules(): Promise<void> {
       humidity: latestWeather.humidity,
     };
 
+    // Extract soil moisture values from JSON field
+    const soilMoistureValues = latestWeather.soilMoistureValues 
+      ? (latestWeather.soilMoistureValues as Record<string, number>)
+      : null;
+
     // Evaluate each rule
     for (const rule of rules) {
       try {
@@ -306,7 +394,7 @@ export async function evaluateRules(): Promise<void> {
         const actions = rule.actions as unknown as Actions;
 
         // Check if conditions are met
-        if (evaluateConditions(conditions, weather)) {
+        if (evaluateConditions(conditions, weather, soilMoistureValues)) {
           // Execute the action
           const result = await executeAction(actions, devices, rachioClient, weather);
 

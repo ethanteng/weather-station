@@ -112,7 +112,8 @@ export interface ParsedWeatherData {
   rain1h?: number;
   rain24h?: number;
   rainTotal?: number;
-  soilMoisture?: number;
+  soilMoisture?: number; // Deprecated: use soilMoistureValues, kept for backward compatibility
+  soilMoistureValues?: Record<string, number>; // { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
 }
 
 export class EcowittClient {
@@ -264,34 +265,44 @@ export class EcowittClient {
 
     // Parse soil moisture from soil_ch1 through soil_ch16
     // Per Ecowitt API docs: soil_ch1.soilmoisture.value, etc.
-    // Use the first available soil channel (typically soil_ch1)
+    // Extract all available sensors and store in soilMoistureValues object
+    const soilMoistureValues: Record<string, number> = {};
     const soilChannels = [
-      deviceData.soil_ch1,
-      deviceData.soil_ch2,
-      deviceData.soil_ch3,
-      deviceData.soil_ch4,
-      deviceData.soil_ch5,
-      deviceData.soil_ch6,
-      deviceData.soil_ch7,
-      deviceData.soil_ch8,
-      deviceData.soil_ch9,
-      deviceData.soil_ch10,
-      deviceData.soil_ch11,
-      deviceData.soil_ch12,
-      deviceData.soil_ch13,
-      deviceData.soil_ch14,
-      deviceData.soil_ch15,
-      deviceData.soil_ch16,
+      { channel: 1, data: deviceData.soil_ch1 },
+      { channel: 2, data: deviceData.soil_ch2 },
+      { channel: 3, data: deviceData.soil_ch3 },
+      { channel: 4, data: deviceData.soil_ch4 },
+      { channel: 5, data: deviceData.soil_ch5 },
+      { channel: 6, data: deviceData.soil_ch6 },
+      { channel: 7, data: deviceData.soil_ch7 },
+      { channel: 8, data: deviceData.soil_ch8 },
+      { channel: 9, data: deviceData.soil_ch9 },
+      { channel: 10, data: deviceData.soil_ch10 },
+      { channel: 11, data: deviceData.soil_ch11 },
+      { channel: 12, data: deviceData.soil_ch12 },
+      { channel: 13, data: deviceData.soil_ch13 },
+      { channel: 14, data: deviceData.soil_ch14 },
+      { channel: 15, data: deviceData.soil_ch15 },
+      { channel: 16, data: deviceData.soil_ch16 },
     ];
 
-    for (const soilChannel of soilChannels) {
+    for (const { channel, data: soilChannel } of soilChannels) {
       if (soilChannel?.soilmoisture?.value) {
         const moisture = parseFloat(soilChannel.soilmoisture.value);
         if (!isNaN(moisture)) {
-          parsed.soilMoisture = moisture;
-          break;
+          const channelKey = `soil_ch${channel}`;
+          soilMoistureValues[channelKey] = moisture;
+          
+          // Set soilMoisture to first available sensor for backward compatibility
+          if (parsed.soilMoisture === undefined) {
+            parsed.soilMoisture = moisture;
+          }
         }
       }
+    }
+
+    if (Object.keys(soilMoistureValues).length > 0) {
+      parsed.soilMoistureValues = soilMoistureValues;
     }
 
     return parsed;
