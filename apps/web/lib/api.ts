@@ -2,10 +2,18 @@ import axios, { AxiosInstance } from 'axios';
 
 // Get API base URL from environment variable
 // Production must use NEXT_PUBLIC_API_URL (e.g., https://api.253510thave.com)
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-
-if (!API_BASE) {
-  throw new Error('NEXT_PUBLIC_API_URL environment variable is required');
+function getApiBase(): string {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiBase) {
+    // Only throw at runtime, not during build/SSR
+    if (typeof window !== 'undefined') {
+      throw new Error('NEXT_PUBLIC_API_URL environment variable is required');
+    }
+    // During build/SSR, return empty string to avoid build errors
+    // This will cause requests to fail at runtime if env var is missing
+    return '';
+  }
+  return apiBase;
 }
 
 // Note: In a real app, you'd handle auth differently
@@ -18,14 +26,18 @@ export function setAuthToken(token: string): void {
 
 function createClient(): AxiosInstance {
   const client = axios.create({
-    baseURL: API_BASE,
+    baseURL: '', // Will be set dynamically in interceptor
     headers: {
       'Content-Type': 'application/json',
     },
   });
 
   // Add auth token to requests if available
+  // Also set baseURL dynamically to ensure env var is read at request time
   client.interceptors.request.use((config) => {
+    // Set baseURL from env var at request time
+    config.baseURL = getApiBase();
+    
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
     }
