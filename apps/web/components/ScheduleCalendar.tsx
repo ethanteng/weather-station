@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { AutomationRule, Forecast16DayResponse, DailyForecast } from '../lib/api';
 import { calculateScheduleOccurrences, groupOccurrencesByDate, ScheduleOccurrence } from '../lib/scheduleCalculator';
 import { rachioApi } from '../lib/api';
@@ -72,14 +73,48 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
     return `${Math.round(tempF)}°F`;
   };
 
+  // Convert mm to inches
+  const mmToInches = (mm: number): number => {
+    return mm / 25.4;
+  };
+
+  // Get weather icon based on precipitation data (same logic as Forecast7Day)
+  const getWeatherIcon = (precipProb: number, precipSumMm: number): string => {
+    // Heavy rain
+    if (precipProb >= 50 || precipSumMm > 0.1) {
+      return '🌧️';
+    }
+    // Rain/showers
+    if (precipProb >= 30 || precipSumMm > 0.01) {
+      return '🌦️';
+    }
+    // Cloudy with chance of rain
+    if (precipProb >= 20) {
+      return '⛅';
+    }
+    // Partly cloudy
+    if (precipProb >= 10) {
+      return '🌤️';
+    }
+    // Sunny
+    return '☀️';
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-full">
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 sm:px-6 py-4 border-b border-slate-200">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-lg sm:text-xl font-semibold text-white">Schedule Calendar</h2>
-          <div className="text-sm text-white/80">
-            Next 30 Days
-          </div>
+          <Link
+            href="/automations"
+            className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 min-h-[44px]"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Edit Automations
+          </Link>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto max-h-[600px]">
@@ -125,24 +160,36 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
                       Forecast
                     </div>
                     {dayForecast ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-600">Temperature:</span>
-                          <span className="font-semibold text-slate-900">
-                            {formatTemperature(dayForecast.tempMinC)} - {formatTemperature(dayForecast.tempMaxC)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-600">Precipitation:</span>
-                          <span className="font-semibold text-slate-900">
-                            {dayForecast.precipProbMax > 0 ? (
-                              <>
-                                {dayForecast.precipProbMax}% chance, {dayForecast.precipSumMm.toFixed(1)}mm
-                              </>
-                            ) : (
-                              'None expected'
-                            )}
-                          </span>
+                      <div className="space-y-2">
+                        {/* Weather Icon */}
+                        <div className="flex items-center gap-3">
+                          <div className="text-3xl">
+                            {getWeatherIcon(dayForecast.precipProbMax, dayForecast.precipSumMm)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-600 text-sm">Temperature:</span>
+                              <span className="font-semibold text-slate-900 text-sm">
+                                {formatTemperature(dayForecast.tempMinC)} - {formatTemperature(dayForecast.tempMaxC)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-slate-600 text-sm">Precipitation:</span>
+                              <span className="font-semibold text-slate-900 text-sm">
+                                {dayForecast.precipProbMax > 0 ? (
+                                  <>
+                                    {dayForecast.precipProbMax}% chance
+                                    {dayForecast.precipSumMm > 0.01 && (
+                                      <>, {mmToInches(dayForecast.precipSumMm).toFixed(2)}"
+                                      </>
+                                    )}
+                                  </>
+                                ) : (
+                                  'None expected'
+                                )}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ) : (
