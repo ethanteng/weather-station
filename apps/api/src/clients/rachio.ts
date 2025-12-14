@@ -119,7 +119,6 @@ class RachioRateLimitTracker {
       this.rateLimitResetTime = null;
       this.rateLimitRemaining = null;
       this.rateLimitLimit = null;
-      this.lastUpdated = null;
     }
     return this.rateLimitResetTime;
   }
