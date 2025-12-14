@@ -355,7 +355,21 @@ function RuleView({
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
   const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ name: string; duration: number; deviceName: string }>; totalDuration: number } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const isRachioSchedule = rule.source === 'rachio';
+
+  // Fetch sensors for displaying names
+  useEffect(() => {
+    const fetchSensors = async () => {
+      try {
+        const sensorData = await sensorApi.getSensors();
+        setSensors(sensorData);
+      } catch (error) {
+        console.error('Error fetching sensors:', error);
+      }
+    };
+    fetchSensors();
+  }, []);
 
   // Formatting helper functions
   const formatInterval = (interval?: number, scheduleJobTypes?: string[], summary?: string): string => {
@@ -593,7 +607,12 @@ function RuleView({
       // Check if it's the new format (has sensors array)
       if ('sensors' in rule.conditions.soilMoisture && Array.isArray(rule.conditions.soilMoisture.sensors)) {
         const sensorCondition = rule.conditions.soilMoisture as SoilMoistureCondition;
-        const sensorStrings = sensorCondition.sensors.map(s => `Sensor ${s.channel} ${s.operator} ${s.value}%`);
+        const sensorStrings = sensorCondition.sensors.map(s => {
+          // Find sensor name by channel, fallback to "Sensor {channel}" if not found
+          const sensor = sensors.find(sens => sens.channel === s.channel);
+          const sensorName = sensor ? sensor.name : `Sensor ${s.channel}`;
+          return `${sensorName} ${s.operator} ${s.value}%`;
+        });
         const logic = sensorCondition.logic || 'AND';
         conditions.push({
           label: 'Soil Moisture',
