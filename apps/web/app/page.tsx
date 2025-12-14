@@ -161,8 +161,8 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Home Weather Station</h1>
-          <p className="text-slate-600 text-lg">Real-time weather monitoring and automated irrigation management</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Home Weather Station</h1>
+          <p className="text-slate-600 text-base sm:text-lg">Real-time weather monitoring and automated irrigation management</p>
         </div>
 
         {/* Error Alert */}
@@ -223,19 +223,16 @@ export default function Dashboard() {
             label="Temperature"
             value={latestWeather?.temperature || null}
             unit="°F"
-            icon="🌡️"
           />
           <WeatherCard
             label="Humidity"
             value={latestWeather?.humidity || null}
             unit="%"
-            icon="💨"
           />
           <WeatherCard
             label="Pressure"
             value={latestWeather?.pressure || null}
             unit=" hPa"
-            icon="📊"
           />
         </div>
 
@@ -243,29 +240,26 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Rainfall Card */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🌧️</span>
-                <h2 className="text-xl font-semibold text-white">Rainfall</h2>
-              </div>
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Rainfall</h2>
             </div>
-            <div className="p-6">
-              <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last Hour</div>
-                  <div className="text-2xl font-bold text-blue-700">
+                  <div className="text-xl sm:text-2xl font-bold text-blue-700">
                     {latestWeather && latestWeather.rain1h !== null ? `${latestWeather.rain1h.toFixed(2)}"` : 'N/A'}
                   </div>
                 </div>
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last 24 Hours</div>
-                  <div className="text-2xl font-bold text-blue-700">
+                  <div className="text-xl sm:text-2xl font-bold text-blue-700">
                     {latestWeather && latestWeather.rain24h !== null ? `${latestWeather.rain24h.toFixed(2)}"` : 'N/A'}
                   </div>
                 </div>
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last 7 Days</div>
-                  <div className="text-2xl font-bold text-blue-700">
+                  <div className="text-xl sm:text-2xl font-bold text-blue-700">
                     {weather7d && weather7d.totalRainfall !== null ? `${weather7d.totalRainfall.toFixed(2)}"` : 'N/A'}
                   </div>
                 </div>
@@ -278,15 +272,12 @@ export default function Dashboard() {
 
           {/* Soil Moisture Sensors */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🌱</span>
-                  <h2 className="text-xl font-semibold text-white">Soil Moisture Sensors</h2>
-                </div>
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h2 className="text-lg sm:text-xl font-semibold text-white">Soil Moisture Sensors</h2>
                 <Link
                   href="/sensors"
-                  className="text-sm text-white/90 hover:text-white underline"
+                  className="text-sm text-white/90 hover:text-white underline min-h-[44px] flex items-center"
                 >
                   Manage Sensors
                 </Link>
@@ -366,13 +357,10 @@ export default function Dashboard() {
 
         {/* Automation Rules */}
         <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">⚙️</span>
-                <h2 className="text-xl font-semibold text-white">Automation Rules</h2>
-              </div>
-              <div className="flex items-center gap-2">
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Automation Rules</h2>
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={async () => {
                     if (pollingRachio || rachioRateLimit?.rateLimited) return;
@@ -401,7 +389,7 @@ export default function Dashboard() {
                     }
                   }}
                   disabled={pollingRachio || rachioRateLimit?.rateLimited === true}
-                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                   title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : "Manually refresh Rachio device and zone data"}
                 >
                   {pollingRachio ? (
@@ -423,7 +411,7 @@ export default function Dashboard() {
                 </button>
                 <Link
                   href="/automations"
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200"
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 min-h-[44px]"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -454,23 +442,13 @@ export default function Dashboard() {
                           >
                             <div className="flex items-center gap-3">
                               <span
-                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                                   rule.enabled
-                                    ? 'bg-green-100 text-green-800 border border-green-200'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                    ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                    : 'bg-slate-50 text-slate-500 border border-slate-200'
                                 }`}
                               >
-                                {rule.enabled ? (
-                                  <>
-                                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                                    Enabled
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
-                                    Disabled
-                                  </>
-                                )}
+                                {rule.enabled ? 'Enabled' : 'Disabled'}
                               </span>
                               <span className="font-semibold text-slate-900">{rule.name}</span>
                             </div>
@@ -533,26 +511,16 @@ export default function Dashboard() {
                                   >
                                     <div className="flex items-center gap-3">
                                       <span
-                                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                        className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                                           rule.enabled
-                                            ? 'bg-green-100 text-green-800 border border-green-200'
-                                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                            : 'bg-slate-50 text-slate-500 border border-slate-200'
                                         }`}
                                       >
-                                        {rule.enabled ? (
-                                          <>
-                                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                                            Enabled
-                                          </>
-                                        ) : (
-                                          <>
-                                            <span className="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
-                                            Disabled
-                                          </>
-                                        )}
+                                        {rule.enabled ? 'Enabled' : 'Disabled'}
                                       </span>
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
-                                        📅 Rachio
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-300">
+                                        Rachio
                                       </span>
                                       <span className="font-semibold text-slate-900">{rule.name}</span>
                                     </div>
@@ -587,11 +555,8 @@ export default function Dashboard() {
         {/* Rachio Devices Status */}
         {devices.length > 0 && (
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🚿</span>
-                <h2 className="text-xl font-semibold text-white">Rachio Devices</h2>
-              </div>
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Rachio Devices</h2>
             </div>
             <div className="p-6">
               <div className="space-y-6">
@@ -601,28 +566,15 @@ export default function Dashboard() {
                     className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">📡</span>
-                        <span className="font-semibold text-slate-900 text-lg">{device.name}</span>
-                      </div>
+                      <span className="font-semibold text-slate-900 text-lg">{device.name}</span>
                       <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                           device.status === 'ONLINE'
-                            ? 'bg-green-100 text-green-800 border border-green-200'
-                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
                       >
-                        {device.status === 'ONLINE' ? (
-                          <>
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                            Online
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
-                            {device.status}
-                          </>
-                        )}
+                        {device.status === 'ONLINE' ? 'Online' : device.status}
                       </span>
                     </div>
                     {device.zones.length > 0 && (
@@ -686,11 +638,11 @@ function ZoneCard({ zone }: { zone: RachioZone }) {
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                 zone.enabled
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-slate-100 text-slate-600'
+                  ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                  : 'bg-slate-50 text-slate-500 border border-slate-200'
               }`}
             >
-              {zone.enabled ? '✓' : '✗'}
+              {zone.enabled ? 'Enabled' : 'Disabled'}
             </span>
             <svg
               className={`w-4 h-4 text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}

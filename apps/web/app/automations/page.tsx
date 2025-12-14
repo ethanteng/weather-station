@@ -139,13 +139,13 @@ export default function AutomationsPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">Automation Rules</h1>
-              <p className="text-slate-600 text-lg">Configure intelligent irrigation automation based on weather conditions</p>
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Automation Rules</h1>
+              <p className="text-slate-600 text-base sm:text-lg">Configure intelligent irrigation automation based on weather conditions</p>
             </div>
             <div className="flex gap-3">
               <Link
                 href="/"
-                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200"
+                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 min-h-[44px]"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -154,7 +154,7 @@ export default function AutomationsPage() {
               </Link>
               <Link
                 href="/sensors"
-                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200"
+                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 min-h-[44px]"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -163,7 +163,7 @@ export default function AutomationsPage() {
               </Link>
               <button
                 onClick={() => setEditingId('new')}
-                className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-105"
+                className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-105 min-h-[44px]"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -226,8 +226,8 @@ export default function AutomationsPage() {
         {/* New Rule Editor */}
         {editingId === 'new' && (
           <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
-              <h2 className="text-xl font-semibold text-white">Create New Automation Rule</h2>
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Create New Automation Rule</h2>
             </div>
             <div className="p-6">
               <RuleEditor
@@ -590,7 +590,7 @@ function RuleView({
       // Handle custom rules
       if (rule.actions.type === 'set_rain_delay') {
         setActionDisplay({
-          icon: '⏸️',
+          icon: '',
           label: 'Set Rain Delay',
           value: `${rule.actions.hours} hours`,
         });
@@ -635,25 +635,24 @@ function RuleView({
         }
         
         setActionDisplay({
-          icon: '🚿',
+          icon: '',
           label: 'Run Zone(s)',
           value: `${rule.actions.minutes} minutes${zoneDisplay ? ` - ${zoneDisplay}` : ''}`,
         });
         return;
       }
-      setActionDisplay({ icon: '❓', label: 'Unknown', value: '' });
+      setActionDisplay({ icon: '', label: 'Unknown', value: '' });
     };
 
     loadActionDisplay();
   }, [rule.actions, rule.source, rule.scheduleZones, rule.deviceName, isRachioSchedule]);
 
   const formatConditions = () => {
-    const conditions: Array<{ label: string; value: string; icon: string }> = [];
+    const conditions: Array<{ label: string; value: string }> = [];
     if (rule.conditions.rain24h) {
       conditions.push({
         label: 'Rain 24h',
         value: `${rule.conditions.rain24h.operator} ${rule.conditions.rain24h.value}"`,
-        icon: '🌧️',
       });
     }
     if (rule.conditions.soilMoisture) {
@@ -670,7 +669,6 @@ function RuleView({
         conditions.push({
           label: 'Soil Moisture',
           value: sensorStrings.join(` ${logic} `),
-          icon: '🌱',
         });
       } else {
         // Old format
@@ -678,7 +676,6 @@ function RuleView({
         conditions.push({
           label: 'Soil Moisture',
           value: `${oldCondition.operator} ${oldCondition.value}%`,
-          icon: '🌱',
         });
       }
     }
@@ -686,28 +683,25 @@ function RuleView({
       conditions.push({
         label: 'Rain 1h',
         value: `${rule.conditions.rain1h.operator} ${rule.conditions.rain1h.value}"`,
-        icon: '💧',
       });
     }
     if (rule.conditions.temperature) {
       conditions.push({
         label: 'Temperature',
         value: `${rule.conditions.temperature.operator} ${rule.conditions.temperature.value}°F`,
-        icon: '🌡️',
       });
     }
     if (rule.conditions.humidity) {
       conditions.push({
         label: 'Humidity',
         value: `${rule.conditions.humidity.operator} ${rule.conditions.humidity.value}%`,
-        icon: '💨',
       });
     }
     return conditions;
   };
 
   const conditions = formatConditions();
-  const action = actionDisplay || { icon: '❓', label: 'Loading...', value: '' };
+  const action = actionDisplay || { icon: '', label: 'Loading...', value: '' };
 
   return (
     <div className={`p-6 ${isRachioSchedule ? 'bg-gradient-to-r from-indigo-50/50 to-purple-50/50 border-l-4 border-indigo-400' : ''}`}>
@@ -716,8 +710,8 @@ function RuleView({
           <div className="mb-3">
             {isRachioSchedule && rule.deviceName && (
               <div className="mb-2">
-                <span className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border-2 border-indigo-300 shadow-sm">
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="inline-flex items-center px-3 py-1.5 rounded text-sm font-semibold bg-slate-100 text-slate-900 border border-slate-300">
+                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
                   {rule.deviceName}
@@ -728,8 +722,8 @@ function RuleView({
               <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
               {isRachioSchedule && (
                 <>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                    📅 Rachio Schedule
+                  <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-300">
+                    Rachio Schedule
                   </span>
                   {'color' in rule && rule.color && (
                     <span
@@ -773,10 +767,9 @@ function RuleView({
               </div>
               <div className="space-y-2">
                 {rachioScheduleDisplay.zones.map((zone, idx) => (
-                  <div key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg text-sm mr-2 mb-2">
-                    <span className="text-lg">🚿</span>
+                  <div key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm mr-2 mb-2">
                     <span className="font-medium text-slate-700">{zone.deviceName} - {zone.name}:</span>
-                    <span className="font-semibold text-purple-700">{zone.duration} min</span>
+                    <span className="font-semibold text-slate-900">{zone.duration} min</span>
                   </div>
                 ))}
                 {rachioScheduleDisplay.zones.length > 1 && (
@@ -1096,11 +1089,10 @@ function RuleView({
                   {conditions.map((cond, idx) => (
                     <div
                       key={idx}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-sm"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm"
                     >
-                      <span>{cond.icon}</span>
                       <span className="font-medium text-slate-700">{cond.label}:</span>
-                      <span className="font-semibold text-blue-700">{cond.value}</span>
+                      <span className="font-semibold text-slate-900">{cond.value}</span>
                     </div>
                   ))}
                 </div>
@@ -1119,10 +1111,9 @@ function RuleView({
                 </svg>
                 <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Action</span>
               </div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
-                <span className="text-lg">{action.icon}</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
                 <span className="font-medium text-slate-700">{action.label}:</span>
-                <span className="font-semibold text-purple-700">{action.value}</span>
+                <span className="font-semibold text-slate-900">{action.value}</span>
               </div>
             </div>
           )}
@@ -1425,11 +1416,11 @@ function RuleEditor({
   }, [actions.type]);
 
   const conditionFields = [
-    { key: 'rain24h' as const, label: 'Rain 24h', icon: '🌧️', unit: '"' },
-    { key: 'soilMoisture' as const, label: 'Soil Moisture', icon: '🌱', unit: '%' },
-    { key: 'rain1h' as const, label: 'Rain 1h', icon: '💧', unit: '"' },
-    { key: 'temperature' as const, label: 'Temperature', icon: '🌡️', unit: '°F' },
-    { key: 'humidity' as const, label: 'Humidity', icon: '💨', unit: '%' },
+    { key: 'rain24h' as const, label: 'Rain 24h', unit: '"' },
+    { key: 'soilMoisture' as const, label: 'Soil Moisture', unit: '%' },
+    { key: 'rain1h' as const, label: 'Rain 1h', unit: '"' },
+    { key: 'temperature' as const, label: 'Temperature', unit: '°F' },
+    { key: 'humidity' as const, label: 'Humidity', unit: '%' },
   ];
 
   const handleZoneToggle = (zoneId: string) => {
@@ -1492,7 +1483,6 @@ function RuleEditor({
               return (
                 <div key={field.key} className="bg-white p-4 rounded-lg border border-slate-200">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xl">{field.icon}</span>
                     <span className="text-sm font-medium text-slate-700">{field.label}:</span>
                     <div className="flex-1"></div>
                     <div className="flex gap-2">
@@ -1674,7 +1664,6 @@ function RuleEditor({
             const condition = conditions[field.key];
             return (
               <div key={field.key} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
-                <span className="text-xl w-8 text-center">{field.icon}</span>
                 <span className="w-32 text-sm font-medium text-slate-700">{field.label}:</span>
                 <select
                   value={condition?.operator || ''}
@@ -1736,8 +1725,8 @@ function RuleEditor({
             }}
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
           >
-            <option value="set_rain_delay">⏸️ Set Rain Delay</option>
-            <option value="run_zone">🚿 Run Zone(s)</option>
+            <option value="set_rain_delay">Set Rain Delay</option>
+            <option value="run_zone">Run Zone(s)</option>
           </select>
           {actions.type === 'set_rain_delay' && (
             <div>
@@ -1805,7 +1794,9 @@ function RuleEditor({
                             </div>
                           ) : (
                             <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                              <span className="text-4xl">🚿</span>
+                              <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
                             </div>
                           )}
                           

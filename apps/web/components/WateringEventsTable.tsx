@@ -17,11 +17,8 @@ export function WateringEventsTable({ events, zones }: WateringEventsTableProps)
   if (events.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">💧</span>
-            <h2 className="text-xl font-semibold text-white">Recent Watering Events</h2>
-          </div>
+        <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-white">Recent Watering Events</h2>
         </div>
         <div className="p-6 text-center">
           <svg className="w-12 h-12 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,29 +30,23 @@ export function WateringEventsTable({ events, zones }: WateringEventsTableProps)
     );
   }
 
-  const getSourceBadge = (source: string) => {
-    const badges = {
-      manual: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', label: 'Manual' },
-      schedule: { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', label: 'Schedule' },
-      automation: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', label: 'Automation' },
+
+  const getSourceLabel = (source: string) => {
+    const labels = {
+      manual: 'Manual',
+      schedule: 'Schedule',
+      automation: 'Automation',
     };
-    const badge = badges[source as keyof typeof badges] || badges.manual;
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${badge.bg} ${badge.text} ${badge.border} border`}>
-        {badge.label}
-      </span>
-    );
+    return labels[source as keyof typeof labels] || 'Manual';
   };
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">💧</span>
-          <h2 className="text-xl font-semibold text-white">Recent Watering Events</h2>
-        </div>
+      <div className="bg-slate-800 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-xl font-semibold text-white">Recent Watering Events</h2>
       </div>
-      <div className="overflow-x-auto">
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
@@ -71,21 +62,44 @@ export function WateringEventsTable({ events, zones }: WateringEventsTableProps)
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                   {new Date(event.timestamp).toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
-                    {zones[event.zoneId] || event.zoneId}
-                  </span>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                  {zones[event.zoneId] || event.zoneId}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
                   {Math.round(event.durationSec / 60)} min
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getSourceBadge(event.source)}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                  {getSourceLabel(event.source)}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+      {/* Mobile Card View */}
+      <div className="md:hidden divide-y divide-slate-200">
+        {events.map((event) => (
+          <div key={event.id} className="p-4">
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-slate-900 mb-1">
+                  {zones[event.zoneId] || event.zoneId}
+                </div>
+                <div className="text-xs text-slate-600">
+                  {new Date(event.timestamp).toLocaleString()}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-semibold text-slate-900">
+                  {Math.round(event.durationSec / 60)} min
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  {getSourceLabel(event.source)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

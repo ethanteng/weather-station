@@ -46,11 +46,8 @@ export function Forecast7Day() {
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📅</span>
-            <h2 className="text-xl font-semibold text-white">7-Day Forecast</h2>
-          </div>
+        <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-white">7-Day Forecast</h2>
         </div>
         <div className="p-6">
           <div className="text-center py-8">
@@ -65,11 +62,8 @@ export function Forecast7Day() {
   if (error) {
     return (
       <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📅</span>
-            <h2 className="text-xl font-semibold text-white">7-Day Forecast</h2>
-          </div>
+        <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-white">7-Day Forecast</h2>
         </div>
         <div className="p-6">
           <div className="text-center py-4">
@@ -86,15 +80,13 @@ export function Forecast7Day() {
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-      <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📅</span>
-          <h2 className="text-xl font-semibold text-white">7-Day Forecast</h2>
-        </div>
+      <div className="bg-slate-800 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-xl font-semibold text-white">7-Day Forecast</h2>
       </div>
       <div className="px-4 py-3">
-        {/* Compact 7-Day Forecast - Single Row */}
-        <div className="grid grid-cols-7 gap-2">
+        {/* Responsive 7-Day Forecast */}
+        <div className="overflow-x-auto -mx-4 px-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 min-w-max lg:min-w-0">
           {forecast.days.map((day, index) => {
             const { dayName, date } = formatDate(day.date);
             const tempMaxF = celsiusToFahrenheit(day.tempMaxC);
@@ -118,17 +110,16 @@ export function Forecast7Day() {
                 <div className="text-center space-y-1">
                   {/* Day and Date - Compact */}
                   <div>
-                    <div className={`text-xs font-semibold flex items-center justify-center gap-1 ${
+                    <div className={`text-xs sm:text-sm font-semibold ${
                       hasSignificantRain ? 'text-blue-900' : 'text-slate-700'
                     }`}>
-                      {hasSignificantRain && <span>🌧️</span>}
-                      <span>{dayName}</span>
+                      {dayName}
                     </div>
-                    <div className="text-[10px] text-slate-600">{date}</div>
+                    <div className="text-[10px] sm:text-xs text-slate-600">{date}</div>
                   </div>
 
                   {/* Temperature - Inline, Smaller */}
-                  <div className="text-xs text-slate-600">
+                  <div className="text-xs sm:text-sm text-slate-600">
                     <span className="font-medium">{tempMaxF.toFixed(0)}°</span>
                     <span className="text-slate-500">/{tempMinF.toFixed(0)}°</span>
                   </div>
@@ -138,13 +129,13 @@ export function Forecast7Day() {
                     <div className={`pt-1 border-t ${
                       hasHeavyRain ? 'border-blue-600' : 'border-blue-400'
                     }`}>
-                      <div className={`text-xs font-bold ${
+                      <div className={`text-xs sm:text-sm font-bold ${
                         hasHeavyRain ? 'text-blue-900' : 'text-blue-800'
                       }`}>
                         {precipProb}%
                       </div>
                       {precipInches > 0.01 && (
-                        <div className={`text-[10px] ${
+                        <div className={`text-[10px] sm:text-xs ${
                           hasHeavyRain ? 'text-blue-900 font-bold' : 'text-blue-700'
                         }`}>
                           {precipInches.toFixed(2)}"
@@ -152,7 +143,7 @@ export function Forecast7Day() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-[10px] text-slate-400 pt-1">
+                    <div className="text-[10px] sm:text-xs text-slate-400 pt-1">
                       {precipProb}%
                     </div>
                   )}
@@ -160,6 +151,7 @@ export function Forecast7Day() {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
     </div>
