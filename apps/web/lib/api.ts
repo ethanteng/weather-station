@@ -311,15 +311,17 @@ export const rachioApi = {
   },
 
   async getRateLimitStatus(): Promise<{
-    rateLimited: boolean;
-    resetTime: string | null;
-    remaining?: number | null;
-    message?: string;
-  }> {
+      rateLimited: boolean;
+      resetTime: string | null;
+      remaining?: number | null;
+      limit?: number | null;
+      message?: string;
+    }> {
     const response = await api.get<{
       rateLimited: boolean;
       resetTime: string | null;
       remaining?: number | null;
+      limit?: number | null;
       message?: string;
     }>('/api/rachio/rate-limit-status');
     return response.data;

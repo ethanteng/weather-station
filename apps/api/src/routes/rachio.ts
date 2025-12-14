@@ -491,7 +491,8 @@ router.get('/rate-limit-status', async (_req: Request, res: Response) => {
       return res.json({
         rateLimited: true,
         resetTime: status.resetTime.toISOString(),
-        remaining: null,
+        remaining: status.remaining,
+        limit: status.limit,
         message: `Rate limit active. Resets at ${status.resetTime.toISOString()}`,
       });
     }
@@ -505,23 +506,32 @@ router.get('/rate-limit-status', async (_req: Request, res: Response) => {
     const client = new RachioClient(apiKey);
     try {
       await client.getPerson();
+      // After successful call, check if we have rate limit info from response headers
+      const status = getRachioRateLimitStatus();
       return res.json({ 
         rateLimited: false,
         resetTime: null,
+        remaining: status.remaining,
+        limit: status.limit,
       });
     } catch (error) {
       if (error instanceof RachioRateLimitError) {
+        const status = getRachioRateLimitStatus();
         return res.json({
           rateLimited: true,
           resetTime: error.resetTime?.toISOString() || null,
-          remaining: error.remaining,
+          remaining: error.remaining ?? status.remaining,
+          limit: status.limit,
           message: error.message,
         });
       }
-      // For other errors, assume not rate limited (might be network/auth error)
+      // For other errors, return stored status if available
+      const status = getRachioRateLimitStatus();
       return res.json({
         rateLimited: false,
         resetTime: null,
+        remaining: status.remaining,
+        limit: status.limit,
       });
     }
   } catch (error) {

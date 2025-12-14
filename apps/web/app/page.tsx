@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [rachioRateLimit, setRachioRateLimit] = useState<{
     rateLimited: boolean;
     resetTime: string | null;
+    remaining?: number | null;
+    limit?: number | null;
     message?: string;
   } | null>(null);
 
@@ -165,8 +167,21 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Home Weather Station</h1>
-          <p className="text-slate-600 text-base sm:text-lg">Real-time weather monitoring and automated irrigation management</p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Home Weather Station</h1>
+              <p className="text-slate-600 text-base sm:text-lg">Real-time weather monitoring and automated irrigation management</p>
+            </div>
+            {/* Subtle API rate limit indicator */}
+            {rachioRateLimit && rachioRateLimit.remaining !== null && rachioRateLimit.limit !== null && (
+              <div className="text-xs text-slate-400 mt-1 whitespace-nowrap">
+                <span className="font-mono">
+                  {rachioRateLimit.remaining.toLocaleString()}/{rachioRateLimit.limit.toLocaleString()}
+                </span>
+                <span className="ml-1 text-slate-500">API calls</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Error Alert */}

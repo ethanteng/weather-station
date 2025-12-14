@@ -101,15 +101,27 @@ export class RachioRateLimitError extends Error {
 // Shared rate limit tracker across all RachioClient instances
 class RachioRateLimitTracker {
   private rateLimitResetTime: Date | null = null;
+  private rateLimitRemaining: number | null = null;
+  private rateLimitLimit: number | null = null;
+  private lastUpdated: Date | null = null;
 
   setResetTime(resetTime: Date | null): void {
     this.rateLimitResetTime = resetTime;
+  }
+
+  setRateLimitInfo(remaining: number | null, limit: number | null): void {
+    this.rateLimitRemaining = remaining;
+    this.rateLimitLimit = limit;
+    this.lastUpdated = new Date();
   }
 
   getResetTime(): Date | null {
     // Clear if expired
     if (this.rateLimitResetTime && new Date() >= this.rateLimitResetTime) {
       this.rateLimitResetTime = null;
+      this.rateLimitRemaining = null;
+      this.rateLimitLimit = null;
+      this.lastUpdated = null;
     }
     return this.rateLimitResetTime;
   }
@@ -118,16 +130,31 @@ class RachioRateLimitTracker {
     const resetTime = this.getResetTime();
     return resetTime !== null && new Date() < resetTime;
   }
+
+  getRemaining(): number | null {
+    return this.rateLimitRemaining;
+  }
+
+  getLimit(): number | null {
+    return this.rateLimitLimit;
+  }
 }
 
 const rateLimitTracker = new RachioRateLimitTracker();
 
 // Export function to get rate limit status without making API call
-export function getRachioRateLimitStatus(): { rateLimited: boolean; resetTime: Date | null } {
+export function getRachioRateLimitStatus(): { 
+  rateLimited: boolean; 
+  resetTime: Date | null;
+  remaining: number | null;
+  limit: number | null;
+} {
   const resetTime = rateLimitTracker.getResetTime();
   return {
     rateLimited: resetTime !== null && new Date() < resetTime,
     resetTime,
+    remaining: rateLimitTracker.getRemaining(),
+    limit: rateLimitTracker.getLimit(),
   };
 }
 
@@ -182,8 +209,17 @@ export class RachioClient {
         const limit = response.headers['x-ratelimit-limit'];
         const reset = response.headers['x-ratelimit-reset'];
         
-        if (remaining !== undefined && parseInt(remaining) < 100) {
-          console.warn(`Rachio API rate limit warning: ${remaining}/${limit} requests remaining`);
+        // Store rate limit info (using shared tracker)
+        if (remaining !== undefined && limit !== undefined) {
+          const remainingNum = parseInt(remaining, 10);
+          const limitNum = parseInt(limit, 10);
+          if (!isNaN(remainingNum) && !isNaN(limitNum)) {
+            rateLimitTracker.setRateLimitInfo(remainingNum, limitNum);
+            
+            if (remainingNum < 100) {
+              console.warn(`Rachio API rate limit warning: ${remainingNum}/${limitNum} requests remaining`);
+            }
+          }
         }
         
         // Update reset time if provided (using shared tracker)
@@ -203,8 +239,18 @@ export class RachioClient {
           const retryAfter = error.response.headers['retry-after'];
           const reset = error.response.headers['x-ratelimit-reset'];
           const remaining = error.response.headers['x-ratelimit-remaining'];
+          const limit = error.response.headers['x-ratelimit-limit'];
           
           console.error(`Rachio API rate limit exceeded. Remaining: ${remaining}, Reset: ${reset}, Retry-After: ${retryAfter}`);
+          
+          // Store rate limit info (using shared tracker)
+          if (remaining !== undefined && limit !== undefined) {
+            const remainingNum = parseInt(remaining, 10);
+            const limitNum = parseInt(limit, 10);
+            if (!isNaN(remainingNum) && !isNaN(limitNum)) {
+              rateLimitTracker.setRateLimitInfo(remainingNum, limitNum);
+            }
+          }
           
           // Store the reset time (using shared tracker)
           let resetDate: Date | null = null;
