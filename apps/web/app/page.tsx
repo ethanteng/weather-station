@@ -223,16 +223,19 @@ export default function Dashboard() {
             label="Temperature"
             value={latestWeather?.temperature || null}
             unit="°F"
+            icon="🌡️"
           />
           <WeatherCard
             label="Humidity"
             value={latestWeather?.humidity || null}
             unit="%"
+            icon="💧"
           />
           <WeatherCard
             label="Pressure"
             value={latestWeather?.pressure || null}
             unit=" hPa"
+            icon="📊"
           />
         </div>
 
@@ -240,8 +243,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Rainfall Card */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-full">
-            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Rainfall</h2>
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xl sm:text-2xl">🌧️</span>
+                <h2 className="text-lg sm:text-xl font-semibold text-white">Rainfall</h2>
+              </div>
             </div>
             <div className="p-4 sm:p-6 flex flex-col flex-grow">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -274,9 +280,12 @@ export default function Dashboard() {
 
           {/* Soil Moisture Sensors */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-full">
-            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 px-4 sm:px-6 py-4 border-b border-slate-200">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h2 className="text-lg sm:text-xl font-semibold text-white">Soil Moisture Sensors</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl sm:text-2xl">🌱</span>
+                  <h2 className="text-lg sm:text-xl font-semibold text-white">Soil Moisture Sensors</h2>
+                </div>
                 <Link
                   href="/sensors"
                   className="text-sm text-white/90 hover:text-white underline min-h-[44px] flex items-center"

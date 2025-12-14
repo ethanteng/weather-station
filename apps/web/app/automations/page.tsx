@@ -1078,10 +1078,7 @@ function RuleView({
           {/* Conditions (only for custom rules) */}
           {!isRachioSchedule && (
             <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+              <div className="mb-2">
                 <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Conditions</span>
               </div>
               {conditions.length > 0 ? (
@@ -1105,10 +1102,7 @@ function RuleView({
           {/* Actions (only for custom rules) */}
           {!isRachioSchedule && (
             <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+              <div className="mb-2">
                 <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Action</span>
               </div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
@@ -1469,10 +1463,7 @@ function RuleEditor({
 
       {/* Conditions */}
       <div className="bg-slate-50 rounded-lg border border-slate-200 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+        <div className="mb-4">
           <label className="text-sm font-semibold text-slate-700">Conditions</label>
           <span className="text-xs text-slate-500 ml-2">(All conditions must be met)</span>
         </div>
@@ -1705,10 +1696,7 @@ function RuleEditor({
 
       {/* Actions */}
       <div className="bg-slate-50 rounded-lg border border-slate-200 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+        <div className="mb-4">
           <label className="text-sm font-semibold text-slate-700">Action</label>
         </div>
         <div className="space-y-4">

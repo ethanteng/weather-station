@@ -4,14 +4,16 @@ interface WeatherCardProps {
   label: string;
   value: number | null;
   unit: string;
+  icon?: string;
 }
 
-export function WeatherCard({ label, value, unit }: WeatherCardProps) {
+export function WeatherCard({ label, value, unit, icon }: WeatherCardProps) {
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
       <div className="p-4 sm:p-6">
-        <div className="mb-4">
+        <div className="flex items-center justify-between mb-4">
           <div className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wide">{label}</div>
+          {icon && <span className="text-xl sm:text-2xl">{icon}</span>}
         </div>
         <div className="text-3xl sm:text-4xl font-bold text-slate-900">
           {value !== null ? (
