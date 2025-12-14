@@ -239,11 +239,11 @@ export default function Dashboard() {
         {/* Rainfall & Soil Moisture */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Rainfall Card */}
-          <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-full">
             <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
               <h2 className="text-lg sm:text-xl font-semibold text-white">Rainfall</h2>
             </div>
-            <div className="p-4 sm:p-6">
+            <div className="p-4 sm:p-6 flex flex-col flex-grow">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last Hour</div>
@@ -265,13 +265,15 @@ export default function Dashboard() {
                 </div>
               </div>
               {weather24h && weather24h.readings.length > 0 && (
-                <RainfallChart data={weather24h.readings} />
+                <div className="mt-auto">
+                  <RainfallChart data={weather24h.readings} />
+                </div>
               )}
             </div>
           </div>
 
           {/* Soil Moisture Sensors */}
-          <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-full">
             <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <h2 className="text-lg sm:text-xl font-semibold text-white">Soil Moisture Sensors</h2>
@@ -283,47 +285,47 @@ export default function Dashboard() {
                 </Link>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6 flex flex-col flex-grow">
               {sensors.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                   {sensors.map((sensor) => {
                     const channelKey = `soil_ch${sensor.channel}`;
                     const currentValue = latestWeather?.soilMoistureValues?.[channelKey] ?? sensor.currentValue;
                     return (
                       <div
                         key={sensor.id}
-                        className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200 p-4"
+                        className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200 p-3"
                       >
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h3 className="text-sm font-semibold text-slate-900">{sensor.name}</h3>
-                            <p className="text-xs text-slate-600">Channel {sensor.channel}</p>
+                        <div className="text-center">
+                          <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                            {sensor.name}
                           </div>
-                          {currentValue !== null && currentValue !== undefined && (
-                            <div className={`px-2 py-1 rounded text-xs font-bold ${
-                              currentValue < 30 ? 'bg-red-100 text-red-700' :
-                              currentValue < 50 ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
-                              {currentValue < 30 ? 'Dry' : currentValue < 50 ? 'Moderate' : 'Wet'}
-                            </div>
+                          {currentValue !== null && currentValue !== undefined ? (
+                            <>
+                              <div className="text-xl sm:text-2xl font-bold text-green-700 mb-1">
+                                {currentValue.toFixed(1)}%
+                              </div>
+                              <div className="flex items-center justify-center gap-1.5 mb-1">
+                                <div className="w-full bg-slate-200 rounded-full h-1.5 max-w-[60px]">
+                                  <div
+                                    className="bg-gradient-to-r from-green-500 to-green-600 h-1.5 rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, Math.max(0, currentValue))}%` }}
+                                  ></div>
+                                </div>
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                  currentValue < 30 ? 'bg-red-100 text-red-700' :
+                                  currentValue < 50 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-green-100 text-green-700'
+                                }`}>
+                                  {currentValue < 30 ? 'Dry' : currentValue < 50 ? 'Moderate' : 'Wet'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500">Channel {sensor.channel}</div>
+                            </>
+                          ) : (
+                            <div className="text-slate-400 italic text-xs">No data</div>
                           )}
                         </div>
-                        {currentValue !== null && currentValue !== undefined ? (
-                          <>
-                            <div className="text-3xl font-bold text-green-700 mb-2">
-                              {currentValue.toFixed(1)}%
-                            </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2">
-                              <div
-                                className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(0, currentValue))}%` }}
-                              ></div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-slate-400 italic text-sm">No data available</div>
-                        )}
                       </div>
                     );
                   })}
@@ -340,7 +342,7 @@ export default function Dashboard() {
                 </div>
               )}
               {sensors.length > 0 && weather24h && weather24h.readings.length > 0 && (
-                <div className="mt-6">
+                <div className="mt-auto">
                   <SoilMoistureChart data={weather24h.readings} />
                 </div>
               )}
@@ -444,7 +446,7 @@ export default function Dashboard() {
                               <span
                                 className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                                   rule.enabled
-                                    ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                    ? 'bg-green-100 text-green-800 border border-green-300'
                                     : 'bg-slate-50 text-slate-500 border border-slate-200'
                                 }`}
                               >
@@ -513,7 +515,7 @@ export default function Dashboard() {
                                       <span
                                         className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                                           rule.enabled
-                                            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                            ? 'bg-green-100 text-green-800 border border-green-300'
                                             : 'bg-slate-50 text-slate-500 border border-slate-200'
                                         }`}
                                       >
@@ -570,7 +572,7 @@ export default function Dashboard() {
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
                           device.status === 'ONLINE'
-                            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                            ? 'bg-green-100 text-green-800 border border-green-300'
                             : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
                       >
@@ -638,7 +640,7 @@ function ZoneCard({ zone }: { zone: RachioZone }) {
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                 zone.enabled
-                  ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                  ? 'bg-green-100 text-green-800 border border-green-300'
                   : 'bg-slate-50 text-slate-500 border border-slate-200'
               }`}
             >

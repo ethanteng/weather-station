@@ -737,7 +737,7 @@ function RuleView({
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                   rule.enabled
-                    ? 'bg-green-100 text-green-800 border border-green-200'
+                    ? 'bg-green-100 text-green-800 border border-green-300'
                     : 'bg-slate-100 text-slate-600 border border-slate-200'
                 }`}
               >

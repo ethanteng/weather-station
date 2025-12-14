@@ -43,6 +43,28 @@ export function Forecast7Day() {
     return { dayName, date: dateFormatted };
   };
 
+  // Get weather icon based on precipitation data
+  const getWeatherIcon = (precipProb: number, precipSumMm: number): string => {
+    // Heavy rain
+    if (precipProb >= 50 || precipSumMm > 0.1) {
+      return '🌧️';
+    }
+    // Rain/showers
+    if (precipProb >= 30 || precipSumMm > 0.01) {
+      return '🌦️';
+    }
+    // Cloudy with chance of rain
+    if (precipProb >= 20) {
+      return '⛅';
+    }
+    // Partly cloudy
+    if (precipProb >= 10) {
+      return '🌤️';
+    }
+    // Sunny
+    return '☀️';
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
@@ -95,6 +117,7 @@ export function Forecast7Day() {
             const precipProb = day.precipProbMax;
             const hasSignificantRain = precipProb >= 30 || precipInches > 0.01;
             const hasHeavyRain = precipProb >= 50 || precipInches > 0.1;
+            const weatherIcon = getWeatherIcon(precipProb, day.precipSumMm);
 
             return (
               <div
@@ -116,6 +139,11 @@ export function Forecast7Day() {
                       {dayName}
                     </div>
                     <div className="text-[10px] sm:text-xs text-slate-600">{date}</div>
+                  </div>
+
+                  {/* Weather Icon */}
+                  <div className="text-xl sm:text-2xl my-1">
+                    {weatherIcon}
                   </div>
 
                   {/* Temperature - Inline, Smaller */}
