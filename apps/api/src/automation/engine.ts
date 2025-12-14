@@ -190,6 +190,14 @@ async function executeAction(
       return null;
     }
 
+    if (devices.length === 0) {
+      console.log('No Rachio devices found, skipping set_rain_delay action');
+      return null;
+    }
+
+    const successfulDeviceIds: string[] = [];
+    const failedDeviceIds: string[] = [];
+
     for (const device of devices) {
       try {
         await rachioClient.setRainDelay(device.id, actions.hours);
@@ -204,9 +212,18 @@ async function executeAction(
             source: 'automation',
           },
         });
+
+        successfulDeviceIds.push(device.id);
       } catch (error) {
         console.error(`Error setting rain delay on device ${device.id}:`, error);
+        failedDeviceIds.push(device.id);
       }
+    }
+
+    // Only return success if at least one device was updated
+    if (successfulDeviceIds.length === 0) {
+      console.log('Failed to set rain delay on all devices');
+      return null;
     }
 
     return {
@@ -214,6 +231,8 @@ async function executeAction(
       action: `set_rain_delay_${actions.hours}h`,
       details: {
         hours: actions.hours,
+        successfulDeviceIds,
+        failedDeviceIds,
         deviceCount: devices.length,
       },
     };
