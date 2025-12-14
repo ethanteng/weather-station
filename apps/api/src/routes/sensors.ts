@@ -52,14 +52,15 @@ router.get('/', async (_req: Request, res: Response) => {
  * GET /api/sensors/:id
  * Get a specific sensor by ID
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const sensor = await prisma.soilMoistureSensor.findUnique({
       where: { id: req.params.id },
     });
 
     if (!sensor) {
-      return res.status(404).json({ error: 'Sensor not found' });
+      res.status(404).json({ error: 'Sensor not found' });
+      return;
     }
 
     // Get latest sensor value
@@ -93,12 +94,13 @@ router.get('/:id', async (req: Request, res: Response) => {
  * POST /api/sensors
  * Create a new sensor (typically auto-created by weather poll, but allow manual creation)
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { channel, name, enabled } = req.body;
 
     if (!channel || channel < 1 || channel > 16) {
-      return res.status(400).json({ error: 'Channel must be between 1 and 16' });
+      res.status(400).json({ error: 'Channel must be between 1 and 16' });
+      return;
     }
 
     // Check if sensor already exists
@@ -107,7 +109,8 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     if (existing) {
-      return res.status(409).json({ error: 'Sensor with this channel already exists' });
+      res.status(409).json({ error: 'Sensor with this channel already exists' });
+      return;
     }
 
     const sensor = await prisma.soilMoistureSensor.create({
@@ -129,7 +132,7 @@ router.post('/', async (req: Request, res: Response) => {
  * PUT /api/sensors/:id
  * Update a sensor (name, enabled status)
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, enabled } = req.body;
 
@@ -138,7 +141,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
 
     if (!sensor) {
-      return res.status(404).json({ error: 'Sensor not found' });
+      res.status(404).json({ error: 'Sensor not found' });
+      return;
     }
 
     const updated = await prisma.soilMoistureSensor.update({
@@ -160,14 +164,15 @@ router.put('/:id', async (req: Request, res: Response) => {
  * DELETE /api/sensors/:id
  * Delete a sensor (soft delete by disabling)
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const sensor = await prisma.soilMoistureSensor.findUnique({
       where: { id: req.params.id },
     });
 
     if (!sensor) {
-      return res.status(404).json({ error: 'Sensor not found' });
+      res.status(404).json({ error: 'Sensor not found' });
+      return;
     }
 
     // Soft delete by disabling

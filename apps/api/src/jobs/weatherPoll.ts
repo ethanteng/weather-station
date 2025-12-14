@@ -57,14 +57,14 @@ export async function pollWeatherData(): Promise<void> {
         rain24h: parsed.rain24h,
         rainTotal: parsed.rainTotal,
         soilMoisture: parsed.soilMoisture, // Backward compatibility
-        soilMoistureValues: parsed.soilMoistureValues || null,
+        soilMoistureValues: parsed.soilMoistureValues || undefined,
         rawPayload: deviceData as unknown as object,
       },
     });
 
     // Create/update SoilMoistureSensor records for detected sensors
     if (parsed.soilMoistureValues) {
-      for (const [channelKey, value] of Object.entries(parsed.soilMoistureValues)) {
+      for (const channelKey of Object.keys(parsed.soilMoistureValues)) {
         // Extract channel number from "soil_ch1" -> 1
         const channelMatch = channelKey.match(/soil_ch(\d+)/);
         if (channelMatch) {
