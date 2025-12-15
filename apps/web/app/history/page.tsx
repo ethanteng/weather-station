@@ -249,12 +249,16 @@ export default function HistoryPage() {
                                 <div className="space-y-2">
                                   <div className="text-sm text-slate-700">
                                     <span className="font-semibold">Zones:</span>{' '}
-                                    {entry.actionDetails.zones?.map((zone, idx) => (
-                                      <span key={zone.zoneId}>
-                                        {zone.zoneName} ({formatDuration(zone.durationMinutes)})
-                                        {idx < (entry.actionDetails.zones?.length || 0) - 1 ? ', ' : ''}
-                                      </span>
-                                    ))}
+                                    {entry.actionDetails.zones?.map((zone, idx) => {
+                                      // Type guard: schedule zones have durationMinutes
+                                      const scheduleZone = zone as { zoneId: string; zoneName: string; durationSec: number; durationMinutes: number };
+                                      return (
+                                        <span key={zone.zoneId}>
+                                          {zone.zoneName} ({formatDuration(scheduleZone.durationMinutes)})
+                                          {idx < (entry.actionDetails.zones?.length || 0) - 1 ? ', ' : ''}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                   {entry.actionDetails.startTime && entry.actionDetails.finishTime && (
                                     <div className="text-sm text-slate-700">
