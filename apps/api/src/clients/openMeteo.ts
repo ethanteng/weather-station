@@ -75,13 +75,17 @@ export class OpenMeteoClient {
       const days: DailyForecast[] = [];
       const daily = data.daily;
       const dayCount = Math.min(7, daily.time.length);
+      let skippedDays = 0;
 
       for (let i = 0; i < dayCount; i++) {
         const tempMax = daily.temperature_2m_max[i];
         const tempMin = daily.temperature_2m_min[i];
         
+        // Skip days with missing temperature data instead of failing entirely
         if (tempMax === null || tempMax === undefined || tempMin === null || tempMin === undefined) {
-          throw new Error(`Missing temperature data for day ${i + 1}`);
+          skippedDays++;
+          console.warn(`Skipping day ${i + 1} (${daily.time[i]}) due to missing temperature data`);
+          continue;
         }
 
         days.push({
@@ -94,9 +98,15 @@ export class OpenMeteoClient {
         });
       }
 
-      // Ensure we have exactly 7 days
-      if (days.length < 7) {
-        throw new Error(`Expected 7 days of forecast data, got ${days.length}`);
+      // Log summary if days were skipped
+      if (skippedDays > 0) {
+        console.warn(`Skipped ${skippedDays} day(s) with missing data. Returning ${days.length} valid day(s).`);
+      }
+
+      // Ensure we have at least 5 days (allow some flexibility for 7-day forecast)
+      // This prevents silently returning incomplete data
+      if (days.length < 5) {
+        throw new Error(`Expected at least 5 days of forecast data, got ${days.length} (skipped ${skippedDays} day(s) with missing data)`);
       }
 
       return {
@@ -148,13 +158,17 @@ export class OpenMeteoClient {
       const days: DailyForecast[] = [];
       const daily = data.daily;
       const dayCount = Math.min(16, daily.time.length);
+      let skippedDays = 0;
 
       for (let i = 0; i < dayCount; i++) {
         const tempMax = daily.temperature_2m_max[i];
         const tempMin = daily.temperature_2m_min[i];
         
+        // Skip days with missing temperature data instead of failing entirely
         if (tempMax === null || tempMax === undefined || tempMin === null || tempMin === undefined) {
-          throw new Error(`Missing temperature data for day ${i + 1}`);
+          skippedDays++;
+          console.warn(`Skipping day ${i + 1} (${daily.time[i]}) due to missing temperature data`);
+          continue;
         }
 
         days.push({
@@ -167,10 +181,15 @@ export class OpenMeteoClient {
         });
       }
 
+      // Log summary if days were skipped
+      if (skippedDays > 0) {
+        console.warn(`Skipped ${skippedDays} day(s) with missing data. Returning ${days.length} valid day(s).`);
+      }
+
       // Ensure we have at least 7 days (same minimum as 7-day forecast)
       // This prevents silently returning incomplete data
       if (days.length < 7) {
-        throw new Error(`Expected at least 7 days of forecast data, got ${days.length}`);
+        throw new Error(`Expected at least 7 days of forecast data, got ${days.length} (skipped ${skippedDays} day(s) with missing data)`);
       }
 
       return {
@@ -188,3 +207,4 @@ export class OpenMeteoClient {
     }
   }
 }
+
