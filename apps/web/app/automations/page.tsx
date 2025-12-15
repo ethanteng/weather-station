@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { automationApi, AutomationRule, rachioApi, RachioZone, sensorApi, SoilMoistureSensor, SoilMoistureCondition, SoilMoistureSensorCondition } from '../../lib/api';
 import Link from 'next/link';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 export default function AutomationsPage() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -14,6 +15,15 @@ export default function AutomationsPage() {
     rateLimitReset: string | null;
     message?: string;
   } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
@@ -101,14 +111,19 @@ export default function AutomationsPage() {
       return;
     }
 
-    if (!confirm('Are you sure you want to delete this rule?')) return;
-
-    try {
-      await automationApi.deleteRule(id);
-      await fetchRules();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete rule');
-    }
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      message: 'Are you sure you want to delete this rule? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await automationApi.deleteRule(id);
+          await fetchRules();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to delete rule');
+        }
+      },
+    });
   };
 
   const handleSave = async (rule: AutomationRule) => {
@@ -386,6 +401,18 @@ export default function AutomationsPage() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title="Delete Rule"
+        message={confirmModal.message}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 }
