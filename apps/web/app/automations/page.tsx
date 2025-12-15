@@ -1322,10 +1322,21 @@ function RuleEditor({
       // Soil moisture is now handled via selectedSensors, skip legacy handling
       // This condition is kept for backward compatibility but shouldn't be called
     } else {
-      setConditions({
-        ...conditions,
-        [field]: value ? { operator: operator as any, value: parseFloat(value) } : undefined,
-      });
+      // If operator is set, create/update the condition (even if value is empty)
+      // If operator is empty, remove the condition
+      if (operator) {
+        const currentCondition = conditions[field as keyof typeof conditions] as { operator: string; value: number } | undefined;
+        const numericValue = value ? parseFloat(value) : (currentCondition?.value ?? 0);
+        setConditions({
+          ...conditions,
+          [field]: { 
+            operator: operator as any, 
+            value: numericValue
+          },
+        });
+      } else {
+        removeCondition(field);
+      }
     }
   };
 
