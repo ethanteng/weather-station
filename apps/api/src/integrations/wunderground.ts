@@ -16,6 +16,7 @@ export interface WUFormattedData {
   baromin?: number;
   rainin?: number;
   dailyrainin?: number;
+  dewptf?: number;
 }
 
 /**
@@ -91,6 +92,22 @@ function detectAndConvertUnits(
     }
   }
 
+  // Dew point: Extract from rawPayload (not stored in WeatherReading)
+  // Check unit and convert if needed
+  if (rawPayload?.outdoor?.dew_point?.value) {
+    const dewPointValue = parseFloat(rawPayload.outdoor.dew_point.value);
+    if (!isNaN(dewPointValue)) {
+      const dewPointUnit = rawPayload.outdoor.dew_point.unit?.toLowerCase() || '';
+      if (dewPointUnit.includes('c') && !dewPointUnit.includes('f')) {
+        // Convert Celsius to Fahrenheit
+        result.dewptf = (dewPointValue * 9) / 5 + 32;
+      } else {
+        // Already Fahrenheit or unknown (assume Imperial)
+        result.dewptf = dewPointValue;
+      }
+    }
+  }
+
   return result;
 }
 
@@ -112,6 +129,7 @@ function formatToRecord(data: WUFormattedData): Record<string, number> {
   if (data.baromin !== undefined) result.baromin = data.baromin;
   if (data.rainin !== undefined) result.rainin = data.rainin;
   if (data.dailyrainin !== undefined) result.dailyrainin = data.dailyrainin;
+  if (data.dewptf !== undefined) result.dewptf = data.dewptf;
   return result;
 }
 
@@ -207,6 +225,9 @@ export async function uploadToWeatherUnderground(
   }
   if (wuData.dailyrainin !== undefined) {
     params.append('dailyrainin', wuData.dailyrainin.toFixed(2));
+  }
+  if (wuData.dewptf !== undefined) {
+    params.append('dewptf', wuData.dewptf.toFixed(1));
   }
 
   try {

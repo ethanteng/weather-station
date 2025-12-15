@@ -202,6 +202,7 @@ Only public weather data is uploaded (already in Imperial units):
 - Humidity (%)
 - Pressure (inHg, absolute)
 - Rainfall (inches)
+- Dew Point (°F)
 
 Soil moisture and irrigation data are NOT uploaded.
 
