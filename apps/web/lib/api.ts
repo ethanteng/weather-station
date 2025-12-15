@@ -377,6 +377,13 @@ export interface AutomationHistoryEntry {
     zoneName?: string | null;
     // Union type for zones - can be either schedule zones or automation zones
     zones?: Array<ScheduleZone | AutomationZone> | null;
+    // For Weather Underground uploads
+    wuResponse?: string | null;
+    computedFields?: Record<string, number> | null;
+    payload?: Record<string, string | number> | null;
+    error?: string | null;
+    skipped?: boolean;
+    reason?: string | null;
   };
 }
 

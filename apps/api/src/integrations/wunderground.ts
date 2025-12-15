@@ -1,8 +1,5 @@
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
 import { WeatherReading } from '@prisma/client';
-
-const prisma = new PrismaClient();
 
 export interface WUUploadResult {
   success: boolean;
@@ -103,6 +100,19 @@ function detectAndConvertUnits(
 export function convertToWUFormat(reading: WeatherReading): WUFormattedData {
   const rawPayload = reading.rawPayload as any;
   return detectAndConvertUnits(reading, rawPayload);
+}
+
+/**
+ * Convert WUFormattedData to Record<string, number> (only include defined values)
+ */
+function formatToRecord(data: WUFormattedData): Record<string, number> {
+  const result: Record<string, number> = {};
+  if (data.tempf !== undefined) result.tempf = data.tempf;
+  if (data.humidity !== undefined) result.humidity = data.humidity;
+  if (data.baromin !== undefined) result.baromin = data.baromin;
+  if (data.rainin !== undefined) result.rainin = data.rainin;
+  if (data.dailyrainin !== undefined) result.dailyrainin = data.dailyrainin;
+  return result;
 }
 
 /**
@@ -218,16 +228,17 @@ export async function uploadToWeatherUnderground(
       success,
       payload: Object.fromEntries(params.entries()),
       wuResponse: responseText,
-      computedFields: wuData,
+      computedFields: formatToRecord(wuData),
       error: success ? undefined : `WU returned: ${responseText}`,
     };
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
+    
     return {
       success: false,
       payload: Object.fromEntries(params.entries()),
-      computedFields: wuData,
+      computedFields: formatToRecord(wuData),
       error: `HTTP error: ${errorMessage}`,
     };
   }
