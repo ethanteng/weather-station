@@ -166,7 +166,7 @@ export function getRachioRateLimitStatus(): {
 export class RachioClient {
   private client: AxiosInstance;
   private cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
-  private readonly PERSON_CACHE_TTL = 60 * 60 * 1000; // 1 hour cache
+  private readonly PERSON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours cache - person data rarely changes
 
   constructor(apiKey: string) {
 
