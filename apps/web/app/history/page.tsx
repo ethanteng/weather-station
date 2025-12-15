@@ -267,19 +267,25 @@ export default function HistoryPage() {
                               ) : (
                                 <div className="text-sm text-slate-700">
                                   {entry.action === 'set_rain_delay' && entry.actionDetails.hours && (
-                                    <span className="font-semibold">Action:</span>
-                                    {' Set rain delay for '}
-                                    <span className="font-bold">{entry.actionDetails.hours} hours</span>
+                                    <>
+                                      <span className="font-semibold">Action:</span>
+                                      {' Set rain delay for '}
+                                      <span className="font-bold">{entry.actionDetails.hours} hours</span>
+                                    </>
                                   )}
                                   {entry.action === 'run_zone' && entry.actionDetails.minutes && (
-                                    <span className="font-semibold">Action:</span>
-                                    {' Ran zone(s) for '}
-                                    <span className="font-bold">{formatDuration(entry.actionDetails.minutes)}</span>
+                                    <>
+                                      <span className="font-semibold">Action:</span>
+                                      {' Ran zone(s) for '}
+                                      <span className="font-bold">{formatDuration(entry.actionDetails.minutes)}</span>
+                                    </>
                                   )}
                                   {entry.action === 'automation_triggered' && (
-                                    <span className="font-semibold">Action:</span>
-                                    {' '}
-                                    {entry.actionDetails.action || 'Triggered'}
+                                    <>
+                                      <span className="font-semibold">Action:</span>
+                                      {' '}
+                                      {entry.actionDetails.action || 'Triggered'}
+                                    </>
                                   )}
                                 </div>
                               )}
@@ -365,4 +371,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-
