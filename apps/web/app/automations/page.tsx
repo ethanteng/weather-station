@@ -443,6 +443,7 @@ function RuleView({
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
   const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; duration: number; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null }>; totalDuration: number } | null>(null);
+  const [customRuleZonesDisplay, setCustomRuleZonesDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null }>; duration: number } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
@@ -644,9 +645,12 @@ function RuleView({
         let zoneDisplay = '';
         if (rule.actions.zoneIds && rule.actions.zoneIds.length > 0) {
           try {
-            // Fetch zone names with device names
+            // Fetch zone names with device names and images
             const devices = await rachioApi.getDevices();
             const zoneDeviceMap = new Map<string, string>(); // zoneId -> deviceName
+            const zoneNameMap = new Map<string, string>(); // zoneId -> zoneName
+            const zoneImageMap = new Map<string, string | null>(); // zoneId -> imageUrl
+            const zoneNumberMap = new Map<string, number | null>(); // zoneId -> zoneNumber
             const allZones: RachioZone[] = [];
             
             // Build device map and collect zones
@@ -655,18 +659,38 @@ function RuleView({
                 allZones.push(...device.zones);
                 device.zones.forEach(zone => {
                   zoneDeviceMap.set(zone.id, device.name);
+                  zoneNameMap.set(zone.id, zone.name);
+                  zoneImageMap.set(zone.id, zone.imageUrl || null);
+                  zoneNumberMap.set(zone.id, zone.zoneNumber || null);
                 });
               }
             }
             
             const selectedZones = allZones.filter(zone => rule.actions.zoneIds?.includes(zone.id));
             if (selectedZones.length > 0) {
-              // Format as "Device Name - Zone Name"
+              // Format as "Device Name - Zone Name" for text display
               const zoneStrings = selectedZones.map(z => {
                 const deviceName = zoneDeviceMap.get(z.id) || 'Unknown Device';
                 return `${deviceName} - ${z.name}`;
               });
               zoneDisplay = zoneStrings.join(', ');
+              
+              // Store zone data with images for visual display
+              const zoneData = rule.actions.zoneIds.map(zoneId => {
+                const zone = selectedZones.find(z => z.id === zoneId);
+                return {
+                  zoneId,
+                  name: zoneNameMap.get(zoneId) || `Zone ${zoneId.substring(0, 8)}`,
+                  deviceName: zoneDeviceMap.get(zoneId) || 'Unknown Device',
+                  imageUrl: zoneImageMap.get(zoneId) || null,
+                  zoneNumber: zoneNumberMap.get(zoneId) || null,
+                };
+              });
+              
+              setCustomRuleZonesDisplay({
+                zones: zoneData,
+                duration: rule.actions.minutes || 0,
+              });
             } else {
               zoneDisplay = `${rule.actions.zoneIds.length} zone(s)`;
             }
@@ -689,6 +713,10 @@ function RuleView({
     };
 
     loadActionDisplay();
+    // Reset custom rule zones display when rule changes
+    if (!isRachioSchedule && rule.actions.type !== 'run_zone') {
+      setCustomRuleZonesDisplay(null);
+    }
   }, [rule.actions, rule.source, rule.scheduleZones, rule.deviceName, isRachioSchedule]);
 
   const formatConditions = () => {
@@ -1199,10 +1227,57 @@ function RuleView({
               <div className="mb-2">
                 <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Action</span>
               </div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
-                <span className="font-medium text-slate-700">{action.label}:</span>
-                <span className="font-semibold text-slate-900">{action.value}</span>
-              </div>
+              {customRuleZonesDisplay && rule.actions.type === 'run_zone' ? (
+                <div>
+                  <div className="mb-2 text-sm text-slate-600">
+                    <span className="font-medium">{action.label}:</span>
+                    <span className="font-semibold ml-2">{customRuleZonesDisplay.duration} minutes</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {customRuleZonesDisplay.zones.map((zone, idx) => (
+                      <div
+                        key={zone.zoneId || idx}
+                        className="flex flex-col items-center bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-200"
+                      >
+                        {/* Zone Image */}
+                        <div className="w-full aspect-square bg-slate-100 overflow-hidden relative">
+                          {zone.imageUrl && !failedImages.has(zone.zoneId) ? (
+                            <img
+                              src={zone.imageUrl}
+                              alt={zone.name}
+                              className="w-full h-full object-cover"
+                              onError={() => {
+                                setFailedImages(prev => new Set(prev).add(zone.zoneId));
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                              <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                            </div>
+                          )}
+                          {/* Duration Badge Overlay */}
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs font-semibold px-2 py-1 rounded shadow-lg">
+                            {customRuleZonesDisplay.duration} min
+                          </div>
+                        </div>
+                        {/* Zone Label */}
+                        <div className="w-full p-2 text-center">
+                          <div className="text-xs font-semibold text-slate-900 leading-tight">
+                            {zone.deviceName} - {zone.name}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                  <span className="font-medium text-slate-700">{action.label}:</span>
+                  <span className="font-semibold text-slate-900">{action.value}</span>
+                </div>
+              )}
             </div>
           )}
 
