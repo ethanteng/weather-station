@@ -786,19 +786,12 @@ function RuleView({
             )}
             <div className="flex items-center gap-3 flex-wrap">
               <h3 className="text-2xl font-bold text-slate-900">{rule.name}</h3>
-              {isRachioSchedule && (
-                <>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-300">
-                    Rachio Schedule
-                  </span>
-                  {'color' in rule && rule.color && (
-                    <span
-                      className="inline-block w-6 h-6 rounded border-2 border-slate-300"
-                      style={{ backgroundColor: rule.color }}
-                      title={`Schedule color: ${rule.color}`}
-                    />
-                  )}
-                </>
+              {isRachioSchedule && 'color' in rule && rule.color && (
+                <span
+                  className="inline-block w-6 h-6 rounded border-2 border-slate-300"
+                  style={{ backgroundColor: rule.color }}
+                  title={`Schedule color: ${rule.color}`}
+                />
               )}
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-all ${
@@ -1209,29 +1202,7 @@ function RuleView({
               Details
             </button>
           )}
-          {isRachioSchedule && onStartSchedule && onSkipSchedule ? (
-            <>
-              <button
-                onClick={() => onStartSchedule(rule.id)}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-all duration-200"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Start
-              </button>
-              <button
-                onClick={() => onSkipSchedule(rule.id)}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-all duration-200"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Skip
-              </button>
-            </>
-          ) : (
+          {!isRachioSchedule && (
             <button
               onClick={() => onToggle(rule.id, !rule.enabled, rule.source)}
               className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
