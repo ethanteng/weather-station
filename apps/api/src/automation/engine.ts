@@ -66,7 +66,7 @@ function calculateTrendSlope(
   let sumX2 = 0;
 
   // Use timestamp as x (in milliseconds since epoch) and value as y
-  sorted.forEach((point, index) => {
+  sorted.forEach((point) => {
     const x = point.timestamp.getTime();
     const y = point.value;
     sumX += x;
