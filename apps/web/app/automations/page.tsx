@@ -442,9 +442,10 @@ function RuleView({
   onSkipSchedule?: (id: string) => void;
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
-  const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ name: string; duration: number; deviceName: string }>; totalDuration: number } | null>(null);
+  const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; duration: number; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null }>; totalDuration: number } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const isRachioSchedule = rule.source === 'rachio';
 
   // Fetch sensors for displaying names
@@ -587,10 +588,12 @@ function RuleView({
       // Handle Rachio schedules differently
       if (isRachioSchedule && rule.scheduleZones) {
         try {
-          // Fetch zone names with device names
+          // Fetch zone names with device names and images
           const devices = await rachioApi.getDevices();
           const zoneDeviceMap = new Map<string, string>(); // zoneId -> deviceName
           const zoneNameMap = new Map<string, string>(); // zoneId -> zoneName
+          const zoneImageMap = new Map<string, string | null>(); // zoneId -> imageUrl
+          const zoneNumberMap = new Map<string, number | null>(); // zoneId -> zoneNumber
           const allZones: RachioZone[] = [];
           
           // Build device and zone maps
@@ -600,15 +603,20 @@ function RuleView({
               device.zones.forEach(zone => {
                 zoneDeviceMap.set(zone.id, device.name);
                 zoneNameMap.set(zone.id, zone.name);
+                zoneImageMap.set(zone.id, zone.imageUrl || null);
+                zoneNumberMap.set(zone.id, zone.zoneNumber || null);
               });
             }
           }
           
-          // Format schedule zones with names and durations
+          // Format schedule zones with names, durations, images, and zone numbers
           const formattedZones = rule.scheduleZones.map(sz => ({
+            zoneId: sz.zoneId,
             name: zoneNameMap.get(sz.zoneId) || `Zone ${sz.zoneId.substring(0, 8)}`,
             duration: Math.round(sz.duration / 60), // Convert seconds to minutes
             deviceName: zoneDeviceMap.get(sz.zoneId) || rule.deviceName || 'Unknown Device',
+            imageUrl: zoneImageMap.get(sz.zoneId) || null,
+            zoneNumber: zoneNumberMap.get(sz.zoneId) || null,
           }));
 
           const totalDuration = rule.scheduleZones.reduce((sum, sz) => sum + sz.duration, 0);
@@ -818,23 +826,53 @@ function RuleView({
           {/* Rachio Schedule Display */}
           {isRachioSchedule && rachioScheduleDisplay && (
             <div className="mb-4">
-              <div className="mb-2">
+              <div className="mb-3">
                 <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Schedule Zones</span>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-3">
                 {rachioScheduleDisplay.zones.map((zone, idx) => (
-                  <div key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm mr-2 mb-2">
-                    <span className="font-medium text-slate-700">{zone.deviceName} - {zone.name}:</span>
-                    <span className="font-semibold text-slate-900">{zone.duration} min</span>
+                  <div
+                    key={zone.zoneId || idx}
+                    className="flex flex-col items-center bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-200"
+                  >
+                    {/* Zone Image */}
+                    <div className="w-full aspect-square bg-slate-100 overflow-hidden relative">
+                      {zone.imageUrl && !failedImages.has(zone.zoneId) ? (
+                        <img
+                          src={zone.imageUrl}
+                          alt={zone.name}
+                          className="w-full h-full object-cover"
+                          onError={() => {
+                            setFailedImages(prev => new Set(prev).add(zone.zoneId));
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                        </div>
+                      )}
+                      {/* Duration Badge Overlay */}
+                      <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs font-semibold px-2 py-1 rounded shadow-lg">
+                        {zone.duration} min
+                      </div>
+                    </div>
+                    {/* Zone Label */}
+                    <div className="w-full p-2 text-center">
+                      <div className="text-xs font-semibold text-slate-900 leading-tight">
+                        {zone.deviceName} - {zone.name}
+                      </div>
+                    </div>
                   </div>
                 ))}
-                {rachioScheduleDisplay.zones.length > 1 && (
-                  <div className="mt-2 text-sm text-slate-600">
-                    <span className="font-medium">Total Duration: </span>
-                    <span className="font-semibold">{rachioScheduleDisplay.totalDuration} minutes</span>
-                  </div>
-                )}
               </div>
+              {rachioScheduleDisplay.zones.length > 1 && (
+                <div className="mt-2 text-sm text-slate-600">
+                  <span className="font-medium">Total Duration: </span>
+                  <span className="font-semibold">{rachioScheduleDisplay.totalDuration} minutes</span>
+                </div>
+              )}
             </div>
           )}
 
