@@ -52,7 +52,7 @@ function calculateScheduleDates(
   startDate: Date,
   endDate: Date
 ): string[] {
-  const dates: string[] = [];
+  let dates: string[] = [];
   
   // Check if schedule has an endDate that's already passed
   // Rachio API returns timestamps in milliseconds (e.g., 1437677593983)
