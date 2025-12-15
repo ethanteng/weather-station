@@ -64,6 +64,8 @@ function calculateScheduleDates(
   }
 
   // Determine the effective start date
+  // For interval-based schedules, use the schedule's startDate if it exists
+  // For day-of-week schedules, use today or the schedule's startDate, whichever is later
   let effectiveStartDate = new Date(startDate);
   effectiveStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
   
@@ -71,8 +73,21 @@ function calculateScheduleDates(
     // Rachio API returns timestamps in milliseconds (e.g., 1437677593983)
     const scheduleStartDate = new Date(schedule.startDate);
     scheduleStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
-    if (scheduleStartDate > effectiveStartDate) {
+    
+    // For interval schedules, always use the schedule's startDate as the base
+    // For day-of-week schedules, use the later of today or schedule startDate
+    const isIntervalSchedule = schedule.scheduleJobTypes?.some(jt => jt.startsWith('INTERVAL_')) || 
+                                (schedule.interval && schedule.interval > 0);
+    
+    if (isIntervalSchedule) {
+      // For intervals, use schedule startDate as the base (even if in the past, 
+      // we'll calculate forward from there)
       effectiveStartDate = scheduleStartDate;
+    } else {
+      // For day-of-week, use the later date
+      if (scheduleStartDate > effectiveStartDate) {
+        effectiveStartDate = scheduleStartDate;
+      }
     }
   }
 
@@ -171,15 +186,39 @@ function calculateIntervalDates(
 ): string[] {
   const dates: string[] = [];
   let currentDate = new Date(startDate);
+  currentDate.setHours(0, 0, 0, 0); // Normalize to start of day
   
-  const effectiveEndDate = scheduleEndDate
-    ? new Date(Math.min(endDate.getTime(), scheduleEndDate * 1000))
-    : endDate;
+  // Normalize endDate to end of day
+  let effectiveEndDate = new Date(endDate);
+  effectiveEndDate.setHours(23, 59, 59, 999);
+  
+  if (scheduleEndDate) {
+    // Rachio API returns timestamps in milliseconds (not seconds)
+    const scheduleEnd = new Date(scheduleEndDate);
+    scheduleEnd.setHours(23, 59, 59, 999);
+    if (scheduleEnd < effectiveEndDate) {
+      effectiveEndDate = scheduleEnd;
+    }
+  }
 
+  // Only include dates that are >= today (don't show past occurrences)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Start from the schedule's startDate and calculate forward
+  // Skip past occurrences and only include future ones
+  while (currentDate < today) {
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(nextDate.getDate() + intervalDays);
+    currentDate.setTime(nextDate.getTime());
+  }
+
+  // Add all occurrences from today forward
   while (currentDate <= effectiveEndDate) {
     dates.push(formatDate(currentDate));
-    currentDate = new Date(currentDate);
-    currentDate.setDate(currentDate.getDate() + intervalDays);
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(nextDate.getDate() + intervalDays);
+    currentDate.setTime(nextDate.getTime());
   }
 
   return dates;
