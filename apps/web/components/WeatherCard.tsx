@@ -15,7 +15,40 @@ interface WeatherCardProps {
   trendData?: TrendDataPoint[];
 }
 
+// Pressure level categories
+const PRESSURE_LEVELS = [
+  { label: 'Very High', min: 30.7, max: 32, color: 'red' },
+  { label: 'High', min: 30.2, max: 30.69, color: 'orange' },
+  { label: 'Normal', min: 29.8, max: 30.19, color: 'green' },
+  { label: 'Low', min: 29, max: 29.79, color: 'blue' },
+  { label: 'Very Low', min: 28, max: 28.99, color: 'purple' },
+];
+
+function getPressureLevel(pressure: number | null): typeof PRESSURE_LEVELS[0] | null {
+  if (pressure === null) return null;
+  return PRESSURE_LEVELS.find(level => pressure >= level.min && pressure <= level.max) || null;
+}
+
+function calculatePressureYAxisDomain(data: number[]): [number, number] {
+  if (data.length === 0) return [30.0, 30.5];
+  
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min;
+  
+  // Add padding (20% of range, minimum 0.1 inHg)
+  const padding = Math.max(range * 0.2, 0.1);
+  
+  // Round down min and round up max to nearest 0.02
+  const roundedMin = Math.floor((min - padding) * 50) / 50;
+  const roundedMax = Math.ceil((max + padding) * 50) / 50;
+  
+  return [roundedMin, roundedMax];
+}
+
 export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCardProps) {
+  const isPressure = label === 'Pressure';
+  
   // Prepare chart data from trend data
   const chartData = trendData && trendData.length > 0
     ? trendData
@@ -28,6 +61,14 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
     : [];
 
   const hasTrendData = chartData.length > 0;
+  
+  // Calculate y-axis domain for pressure
+  const pressureYAxisDomain = isPressure && chartData.length > 0
+    ? calculatePressureYAxisDomain(chartData.map(d => d.value as number))
+    : undefined;
+  
+  // Get pressure level for current reading
+  const pressureLevel = isPressure ? getPressureLevel(value) : null;
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
@@ -36,16 +77,41 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
           <div className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wide">{label}</div>
           {icon && <span className="text-xl sm:text-2xl">{icon}</span>}
         </div>
-        <div className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+        <div className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
           {value !== null ? (
             <>
-              {value.toFixed(1)}
+              {isPressure ? value.toFixed(2) : value.toFixed(1)}
               <span className="text-xl sm:text-2xl text-slate-600 ml-1">{unit}</span>
             </>
           ) : (
             <span className="text-slate-400 text-xl sm:text-2xl">N/A</span>
           )}
         </div>
+        {isPressure && pressureLevel && (
+          <div className="mb-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 bg-white"
+              style={{
+                borderColor: pressureLevel.color === 'red' ? '#ef4444' :
+                            pressureLevel.color === 'orange' ? '#f97316' :
+                            pressureLevel.color === 'green' ? '#10b981' :
+                            pressureLevel.color === 'blue' ? '#3b82f6' :
+                            '#a855f7',
+              }}
+            >
+              <div 
+                className="w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor: pressureLevel.color === 'red' ? '#ef4444' :
+                                  pressureLevel.color === 'orange' ? '#f97316' :
+                                  pressureLevel.color === 'green' ? '#10b981' :
+                                  pressureLevel.color === 'blue' ? '#3b82f6' :
+                                  '#a855f7',
+                }}
+              />
+              <span className="text-sm font-semibold text-slate-900">{pressureLevel.label} Pressure</span>
+            </div>
+          </div>
+        )}
         {hasTrendData && (
           <div className="h-32 mt-4">
             <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">7-Day Trend</div>
@@ -63,7 +129,9 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
                   stroke="#64748b"
                   fontSize={10}
                   tickLine={false}
-                  width={35}
+                  width={isPressure ? 45 : 35}
+                  domain={pressureYAxisDomain}
+                  tickFormatter={(val: number) => isPressure ? val.toFixed(2) : val.toFixed(1)}
                 />
                 <Tooltip
                   contentStyle={{
@@ -74,7 +142,7 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
                     fontSize: '12px',
                   }}
                   labelStyle={{ color: '#1e293b', fontWeight: 600 }}
-                  formatter={(value: number) => [`${value.toFixed(1)}${unit}`, '']}
+                  formatter={(value: number) => [`${isPressure ? value.toFixed(2) : value.toFixed(1)}${unit}`, '']}
                   labelFormatter={(label) => `Date: ${label}`}
                 />
                 <Line
@@ -87,6 +155,29 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
                 />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+        )}
+        {isPressure && (
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Understanding Barometric Pressure Levels</div>
+            <div className="space-y-1.5">
+              {PRESSURE_LEVELS.map((level) => (
+                <div key={level.label} className="flex items-center gap-2 text-xs">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{
+                      backgroundColor: level.color === 'red' ? '#ef4444' :
+                                      level.color === 'orange' ? '#f97316' :
+                                      level.color === 'green' ? '#10b981' :
+                                      level.color === 'blue' ? '#3b82f6' :
+                                      '#a855f7',
+                    }}
+                  />
+                  <span className="text-slate-700 font-medium min-w-[80px]">{level.label}:</span>
+                  <span className="text-slate-600">{level.min} - {level.max} inHg</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
