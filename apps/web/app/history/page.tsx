@@ -11,25 +11,25 @@ export default function HistoryPage() {
   const [filterType, setFilterType] = useState<'all' | 'automation' | 'schedule'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchHistory = async () => {
-    try {
-      setError(null);
-      const { setAuthToken: setApiAuth } = await import('../../lib/api');
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        setApiAuth(token);
-      }
-
-      const response = await automationApi.getHistory(200, 0);
-      setEntries(response.entries);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load history');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        setError(null);
+        const { setAuthToken: setApiAuth } = await import('../../lib/api');
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          setApiAuth(token);
+        }
+
+        const response = await automationApi.getHistory(200, 0);
+        setEntries(response.entries);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load history');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
     if (token) {
       localStorage.setItem('authToken', token);
