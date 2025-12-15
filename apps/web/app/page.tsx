@@ -179,11 +179,24 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Home Weather Station</h1>
               <p className="text-slate-600 text-base sm:text-lg">Real-time weather monitoring and automated irrigation management</p>
+              {/* Subtle API rate limit indicator */}
+              {rachioRateLimit && 
+               rachioRateLimit.remaining !== null && 
+               rachioRateLimit.remaining !== undefined &&
+               rachioRateLimit.limit !== null && 
+               rachioRateLimit.limit !== undefined && (
+                <div className="text-xs text-slate-400 mt-2">
+                  <span className="font-mono">
+                    {(rachioRateLimit.limit - rachioRateLimit.remaining).toLocaleString()}/{rachioRateLimit.limit.toLocaleString()}
+                  </span>
+                  <span className="ml-1 text-slate-500">API calls</span>
+                </div>
+              )}
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap ml-auto">
               <Link
                 href="/automations"
                 className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 min-h-[44px]"
@@ -202,20 +215,16 @@ export default function Dashboard() {
                 </svg>
                 History
               </Link>
+              <Link
+                href="/sensors"
+                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 min-h-[44px]"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Manage Sensors
+              </Link>
             </div>
-            {/* Subtle API rate limit indicator */}
-            {rachioRateLimit && 
-             rachioRateLimit.remaining !== null && 
-             rachioRateLimit.remaining !== undefined &&
-             rachioRateLimit.limit !== null && 
-             rachioRateLimit.limit !== undefined && (
-              <div className="text-xs text-slate-400 mt-1 whitespace-nowrap">
-                <span className="font-mono">
-                  {(rachioRateLimit.limit - rachioRateLimit.remaining).toLocaleString()}/{rachioRateLimit.limit.toLocaleString()}
-                </span>
-                <span className="ml-1 text-slate-500">API calls</span>
-              </div>
-            )}
           </div>
         </div>
 
