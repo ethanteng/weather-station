@@ -1264,8 +1264,6 @@ function RuleEditor({
   const [loadingZones, setLoadingZones] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [loadingSensors, setLoadingSensors] = useState(false);
-  const [soilMoistureMode, setSoilMoistureMode] = useState<'single' | 'multi'>('single');
-  const [soilMoistureCondition, setSoilMoistureCondition] = useState<{ operator: string; value: string }>({ operator: '', value: '' });
   const [selectedSensors, setSelectedSensors] = useState<Array<{ channel: number; operator: string; value: string }>>([]);
   const [sensorLogic, setSensorLogic] = useState<'AND' | 'OR'>('AND');
 
@@ -1285,31 +1283,19 @@ function RuleEditor({
     // Build final conditions with soil moisture condition
     const finalConditions = { ...conditions };
     
-    if (soilMoistureMode === 'multi') {
-      // Multi-sensor format
-      const validSensors = selectedSensors.filter(s => s.channel && s.operator && s.value);
-      if (validSensors.length > 0) {
-        finalConditions.soilMoisture = {
-          sensors: validSensors.map(s => ({
-            channel: s.channel,
-            operator: s.operator as any,
-            value: parseFloat(s.value),
-          })),
-          logic: sensorLogic,
-        };
-      } else {
-        delete finalConditions.soilMoisture;
-      }
+    // Always use multi-sensor format (supports single or multiple sensors)
+    const validSensors = selectedSensors.filter(s => s.channel && s.operator && s.value);
+    if (validSensors.length > 0) {
+      finalConditions.soilMoisture = {
+        sensors: validSensors.map(s => ({
+          channel: s.channel,
+          operator: s.operator as any,
+          value: parseFloat(s.value),
+        })),
+        logic: sensorLogic,
+      };
     } else {
-      // Single sensor format (backward compatibility)
-      if (soilMoistureCondition.operator && soilMoistureCondition.value) {
-        finalConditions.soilMoisture = {
-          operator: soilMoistureCondition.operator as any,
-          value: parseFloat(soilMoistureCondition.value),
-        };
-      } else {
-        delete finalConditions.soilMoisture;
-      }
+      delete finalConditions.soilMoisture;
     }
 
     const ruleData: AutomationRule = {
@@ -1327,18 +1313,8 @@ function RuleEditor({
 
   const updateCondition = (field: string, operator: string, value: string) => {
     if (field === 'soilMoisture') {
-      // Handle soil moisture condition separately
-      setSoilMoistureCondition({ operator, value });
-      if (value && operator) {
-        setConditions({
-          ...conditions,
-          soilMoisture: { operator: operator as any, value: parseFloat(value) },
-        });
-      } else {
-        const newConditions = { ...conditions };
-        delete newConditions.soilMoisture;
-        setConditions(newConditions);
-      }
+      // Soil moisture is now handled via selectedSensors, skip legacy handling
+      // This condition is kept for backward compatibility but shouldn't be called
     } else {
       setConditions({
         ...conditions,
@@ -1377,7 +1353,6 @@ function RuleEditor({
       const smCondition = rule.conditions.soilMoisture;
       // Check if it's the new format (has sensors array)
       if ('sensors' in smCondition && Array.isArray(smCondition.sensors)) {
-        setSoilMoistureMode('multi');
         setSelectedSensors(smCondition.sensors.map(s => ({
           channel: s.channel,
           operator: s.operator,
@@ -1385,16 +1360,26 @@ function RuleEditor({
         })));
         setSensorLogic(smCondition.logic || 'AND');
       } else {
-        // Old format - TypeScript now knows this is the old format
+        // Convert old single-sensor format to new multi-sensor format
         const oldCondition = smCondition as { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
-        setSoilMoistureMode('single');
-        setSoilMoistureCondition({
-          operator: oldCondition.operator || '',
-          value: oldCondition.value?.toString() || '',
-        });
+        // Find the first available sensor (or use channel 1 as default)
+        const firstSensor = sensors.length > 0 ? sensors[0] : null;
+        if (oldCondition.operator && oldCondition.value !== undefined) {
+          setSelectedSensors([{
+            channel: firstSensor?.channel || 1,
+            operator: oldCondition.operator,
+            value: oldCondition.value.toString(),
+          }]);
+          setSensorLogic('AND');
+        } else {
+          setSelectedSensors([]);
+        }
       }
+    } else {
+      // Initialize with empty array if no condition exists
+      setSelectedSensors([]);
     }
-  }, [rule]);
+  }, [rule, sensors]);
 
   // Fetch zones when run_zone action is selected
   useEffect(() => {
@@ -1497,81 +1482,7 @@ function RuleEditor({
             if (field.key === 'soilMoisture') {
               return (
                 <div key={field.key} className="bg-white p-4 rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-slate-700">{field.label}:</span>
-                    <div className="flex-1"></div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSoilMoistureMode('single')}
-                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                          soilMoistureMode === 'single'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        Single Sensor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSoilMoistureMode('multi')}
-                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                          soilMoistureMode === 'multi'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        Multiple Sensors
-                      </button>
-                    </div>
-                  </div>
-
-                  {soilMoistureMode === 'single' ? (
-                    <div className="flex items-center gap-3">
-                      <select
-                        value={soilMoistureCondition.operator}
-                        onChange={(e) => {
-                          const newCondition = { ...soilMoistureCondition, operator: e.target.value };
-                          setSoilMoistureCondition(newCondition);
-                          if (e.target.value && newCondition.value) {
-                            updateCondition('soilMoisture', e.target.value, newCondition.value);
-                          } else {
-                            removeCondition('soilMoisture');
-                          }
-                        }}
-                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      >
-                        <option value="">Not used</option>
-                        <option value=">=">≥ (Greater than or equal)</option>
-                        <option value="<=">≤ (Less than or equal)</option>
-                        <option value=">">&gt; (Greater than)</option>
-                        <option value="<">&lt; (Less than)</option>
-                        <option value="==">= (Equal to)</option>
-                      </select>
-                      {soilMoistureCondition.operator && (
-                        <>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={soilMoistureCondition.value}
-                            onChange={(e) => {
-                              const newCondition = { ...soilMoistureCondition, value: e.target.value };
-                              setSoilMoistureCondition(newCondition);
-                              if (newCondition.operator && e.target.value) {
-                                updateCondition('soilMoisture', newCondition.operator, e.target.value);
-                              } else {
-                                removeCondition('soilMoisture');
-                              }
-                            }}
-                            className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-slate-600 font-medium w-8">{field.unit}</span>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
+                  <div className="space-y-3">
                       {loadingSensors ? (
                         <div className="text-sm text-slate-500 py-2">Loading sensors...</div>
                       ) : sensors.length === 0 ? (
@@ -1653,6 +1564,9 @@ function RuleEditor({
                             >
                               + Add Sensor
                             </button>
+                            {selectedSensors.length === 0 && (
+                              <span className="text-sm text-slate-500 italic">Click "+ Add Sensor" to configure soil moisture condition</span>
+                            )}
                             {selectedSensors.length > 1 && (
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-slate-600">Logic:</span>
@@ -1670,7 +1584,6 @@ function RuleEditor({
                         </>
                       )}
                     </div>
-                  )}
                 </div>
               );
             }
