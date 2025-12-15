@@ -1420,8 +1420,8 @@ function RuleEditor({
 
   const conditionFields = [
     { key: 'rain24h' as const, label: 'Rain 24h', unit: '"' },
-    { key: 'soilMoisture' as const, label: 'Soil Moisture', unit: '%' },
     { key: 'rain1h' as const, label: 'Rain 1h', unit: '"' },
+    { key: 'soilMoisture' as const, label: 'Soil Moisture', unit: '%' },
     { key: 'temperature' as const, label: 'Temperature', unit: '°F' },
     { key: 'humidity' as const, label: 'Humidity', unit: '%' },
   ];
@@ -1482,6 +1482,9 @@ function RuleEditor({
             if (field.key === 'soilMoisture') {
               return (
                 <div key={field.key} className="bg-white p-4 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-slate-700">{field.label}:</span>
+                  </div>
                   <div className="space-y-3">
                       {loadingSensors ? (
                         <div className="text-sm text-slate-500 py-2">Loading sensors...</div>
