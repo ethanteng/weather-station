@@ -218,7 +218,6 @@ router.get('/history', async (req: Request, res: Response) => {
       
       // Determine type and extract relevant information
       const isSchedule = log.source === 'rachio_schedule';
-      const isAutomation = log.source === 'automation';
       
       return {
         id: log.id,

@@ -11,14 +11,6 @@ export default function HistoryPage() {
   const [filterType, setFilterType] = useState<'all' | 'automation' | 'schedule'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
-    if (token) {
-      localStorage.setItem('authToken', token);
-      fetchHistory();
-    }
-  }, []);
-
   const fetchHistory = async () => {
     try {
       setError(null);
@@ -36,6 +28,14 @@ export default function HistoryPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
+    if (token) {
+      localStorage.setItem('authToken', token);
+      fetchHistory();
+    }
+  }, []);
 
   // Group entries by date
   const groupedEntries = entries.reduce((acc, entry) => {

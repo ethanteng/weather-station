@@ -273,7 +273,7 @@ async function executeAction(
     humidity: number | null;
     pressure: number | null;
   },
-  soilMoistureValues?: Record<string, number> | null,
+  _soilMoistureValues?: Record<string, number> | null,
   ruleId?: string,
   ruleName?: string
 ): Promise<AutomationResult | null> {
@@ -585,7 +585,7 @@ export async function evaluateRules(): Promise<void> {
         // Check if conditions are met
         if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData)) {
           // Execute the action
-          const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues, rule.id, rule.name);
+          const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues as Record<string, number> | null, rule.id, rule.name);
 
           if (result) {
             results.push({
@@ -619,7 +619,7 @@ export async function evaluateRules(): Promise<void> {
                   rain1h: latestWeather.rain1h,
                   soilMoisture: latestWeather.soilMoisture,
                   soilMoistureValues: latestWeather.soilMoistureValues,
-                  resultDetails: result.details,
+                  resultDetails: result.details as any,
                 },
                 source: 'automation',
               },

@@ -144,7 +144,7 @@ export async function pollRachioData(): Promise<void> {
       }
 
       // Create audit log entries for schedule runs
-      for (const [key, events] of scheduleRuns.entries()) {
+      for (const [, events] of scheduleRuns.entries()) {
         if (events.length === 0) continue;
 
         // Try to identify which schedule ran by matching zones
