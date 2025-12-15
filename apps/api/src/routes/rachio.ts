@@ -125,14 +125,34 @@ router.post('/rain-delay', async (req: Request, res: Response) => {
     const client = new RachioClient(apiKey);
     await client.setRainDelay(deviceId, hours);
 
-    // Log to audit log
+    // Get latest weather reading for weather stats
+    const latestWeather = await prisma.weatherReading.findFirst({
+      orderBy: { timestamp: 'desc' },
+    });
+
+    // Get device name for audit log
+    const device = await prisma.rachioDevice.findUnique({
+      where: { id: deviceId },
+      select: { name: true },
+    });
+
+    // Log to audit log with weather stats
     await prisma.auditLog.create({
       data: {
         action: 'set_rain_delay',
         details: {
           deviceId,
+          deviceName: device?.name || null,
           hours,
           source: 'manual',
+          completed: true,
+          temperature: latestWeather?.temperature ?? null,
+          humidity: latestWeather?.humidity ?? null,
+          pressure: latestWeather?.pressure ?? null,
+          rain24h: latestWeather?.rain24h ?? null,
+          rain1h: latestWeather?.rain1h ?? null,
+          soilMoisture: latestWeather?.soilMoisture ?? null,
+          soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
         },
         source: 'api',
       },
@@ -172,6 +192,12 @@ router.post('/zone/run', async (req: Request, res: Response) => {
       orderBy: { timestamp: 'desc' },
     });
 
+    // Get zone and device info for audit log
+    const zone = await prisma.rachioZone.findUnique({
+      where: { id: zoneId },
+      select: { name: true, device: { select: { id: true, name: true } } },
+    });
+
     // Store watering event
     await prisma.wateringEvent.create({
       data: {
@@ -191,6 +217,9 @@ router.post('/zone/run', async (req: Request, res: Response) => {
         action: 'run_zone',
         details: {
           zoneId,
+          zoneName: zone?.name || null,
+          deviceId: zone?.device?.id || null,
+          deviceName: zone?.device?.name || null,
           durationSec,
           minutes,
           source: 'manual',

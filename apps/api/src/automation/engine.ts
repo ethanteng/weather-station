@@ -300,11 +300,18 @@ async function executeAction(
           orderBy: { timestamp: 'desc' },
         });
 
+        // Get device name for audit log
+        const deviceRecord = await prisma.rachioDevice.findUnique({
+          where: { id: device.id },
+          select: { name: true },
+        });
+
         await prisma.auditLog.create({
           data: {
             action: 'set_rain_delay',
             details: {
               deviceId: device.id,
+              deviceName: deviceRecord?.name || null,
               hours: actions.hours,
               ruleId: ruleId || null,
               ruleName: ruleName || null,
@@ -405,6 +412,12 @@ async function executeAction(
           orderBy: { timestamp: 'desc' },
         });
 
+        // Get zone and device info for audit log
+        const zone = await prisma.rachioZone.findUnique({
+          where: { id: zoneId },
+          select: { name: true, device: { select: { id: true, name: true } } },
+        });
+
         await prisma.wateringEvent.create({
           data: {
             zoneId: zoneId,
@@ -424,6 +437,9 @@ async function executeAction(
             action: 'run_zone',
             details: {
               zoneId: zoneId,
+              zoneName: zone?.name || null,
+              deviceId: zone?.device?.id || null,
+              deviceName: zone?.device?.name || null,
               durationSec,
               minutes: Math.round(durationSec / 60),
               ruleId: ruleId || null,
@@ -453,15 +469,30 @@ async function executeAction(
       return null;
     }
 
+    // Get zone names for successful zones
+    const successfulZones = successfulZoneIds.length > 0
+      ? await prisma.rachioZone.findMany({
+          where: { id: { in: successfulZoneIds } },
+          select: { id: true, name: true, device: { select: { id: true, name: true } } },
+        })
+      : [];
+
     return {
       triggered: true,
       action: `run_zone_${actions.minutes}min`,
       details: {
+        minutes: actions.minutes,
         zoneIds: successfulZoneIds,
         failedZoneIds,
         durationSec,
         soilMoisture: weather.soilMoisture,
         rain24h: weather.rain24h,
+        zones: successfulZones.map(z => ({
+          zoneId: z.id,
+          zoneName: z.name,
+          deviceId: z.device?.id || null,
+          deviceName: z.device?.name || null,
+        })),
       },
     };
   }

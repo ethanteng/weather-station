@@ -366,6 +366,13 @@ export interface AutomationHistoryEntry {
     zoneIds?: string[];
     deviceIds?: string[];
     resultDetails?: Record<string, unknown>;
+    zoneName?: string | null;
+    zones?: Array<{
+      zoneId: string;
+      zoneName: string;
+      deviceId?: string | null;
+      deviceName?: string | null;
+    }> | null;
   };
 }
 

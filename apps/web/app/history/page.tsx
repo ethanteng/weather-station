@@ -271,6 +271,9 @@ export default function HistoryPage() {
                                       <span className="font-semibold">Action:</span>
                                       {' Set rain delay for '}
                                       <span className="font-bold">{entry.actionDetails.hours} hours</span>
+                                      {entry.deviceName && (
+                                        <span className="ml-2 text-slate-600">({entry.deviceName})</span>
+                                      )}
                                     </>
                                   )}
                                   {entry.action === 'run_zone' && entry.actionDetails.minutes && (
@@ -278,6 +281,12 @@ export default function HistoryPage() {
                                       <span className="font-semibold">Action:</span>
                                       {' Ran zone(s) for '}
                                       <span className="font-bold">{formatDuration(entry.actionDetails.minutes)}</span>
+                                      {entry.actionDetails.zoneName && (
+                                        <span className="ml-2 text-slate-600">({entry.deviceName} - {entry.actionDetails.zoneName})</span>
+                                      )}
+                                      {entry.deviceName && !entry.actionDetails.zoneName && (
+                                        <span className="ml-2 text-slate-600">({entry.deviceName})</span>
+                                      )}
                                     </>
                                   )}
                                   {entry.action === 'automation_triggered' && (
@@ -285,6 +294,16 @@ export default function HistoryPage() {
                                       <span className="font-semibold">Action:</span>
                                       {' '}
                                       {entry.actionDetails.action || 'Triggered'}
+                                      {entry.actionDetails.zones && Array.isArray(entry.actionDetails.zones) && entry.actionDetails.zones.length > 0 && (
+                                        <span className="ml-2 text-slate-600">
+                                          ({entry.actionDetails.zones.map((z: any) => `${z.deviceName || entry.deviceName || ''} - ${z.zoneName}`).filter(Boolean).join(', ')})
+                                        </span>
+                                      )}
+                                      {entry.actionDetails.zoneIds && Array.isArray(entry.actionDetails.zoneIds) && entry.actionDetails.zoneIds.length > 0 && !entry.actionDetails.zones && (
+                                        <span className="ml-2 text-slate-600">
+                                          ({entry.actionDetails.zoneIds.length} zone{entry.actionDetails.zoneIds.length !== 1 ? 's' : ''})
+                                        </span>
+                                      )}
                                     </>
                                   )}
                                 </div>

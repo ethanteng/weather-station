@@ -185,6 +185,12 @@ router.get('/history', async (req: Request, res: Response) => {
             source: 'rachio_schedule',
             action: 'rachio_schedule_ran',
           },
+          {
+            source: 'api',
+            action: {
+              in: ['set_rain_delay', 'run_zone'],
+            },
+          },
         ],
       },
     });
@@ -203,6 +209,12 @@ router.get('/history', async (req: Request, res: Response) => {
             source: 'rachio_schedule',
             action: 'rachio_schedule_ran',
           },
+          {
+            source: 'api',
+            action: {
+              in: ['set_rain_delay', 'run_zone'],
+            },
+          },
         ],
       },
       orderBy: {
@@ -212,23 +224,126 @@ router.get('/history', async (req: Request, res: Response) => {
       skip: offset,
     });
 
+    // Collect all IDs that need enrichment (for batch queries)
+    const zoneIdsToFetch = new Set<string>();
+    const deviceIdsToFetch = new Set<string>();
+    
+    auditLogs.forEach(log => {
+      const details = log.details as any;
+      
+      // Collect zone IDs that need enrichment
+      if (!details.zoneName && details.zoneId) {
+        zoneIdsToFetch.add(details.zoneId);
+      }
+      // Collect from zoneIds array if present
+      if (details.zoneIds && Array.isArray(details.zoneIds)) {
+        details.zoneIds.forEach((id: string) => {
+          zoneIdsToFetch.add(id);
+        });
+      }
+      if (details.resultDetails?.successfulZoneIds && Array.isArray(details.resultDetails.successfulZoneIds)) {
+        details.resultDetails.successfulZoneIds.forEach((id: string) => {
+          if (!details.resultDetails.zones?.some((z: any) => z.zoneId === id)) {
+            zoneIdsToFetch.add(id);
+          }
+        });
+      }
+      
+      // Collect device IDs that need enrichment
+      if (!details.deviceName && details.deviceId) {
+        deviceIdsToFetch.add(details.deviceId);
+      }
+    });
+    
+    // Batch fetch zones and devices
+    const zonesMap = new Map<string, { name: string; deviceName: string | null; deviceId: string | null }>();
+    if (zoneIdsToFetch.size > 0) {
+      const zones = await prisma.rachioZone.findMany({
+        where: { id: { in: Array.from(zoneIdsToFetch) } },
+        select: { id: true, name: true, device: { select: { id: true, name: true } } },
+      });
+      zones.forEach(zone => {
+        zonesMap.set(zone.id, {
+          name: zone.name,
+          deviceName: zone.device?.name || null,
+          deviceId: zone.device?.id || null,
+        });
+      });
+    }
+    
+    const devicesMap = new Map<string, string>();
+    if (deviceIdsToFetch.size > 0) {
+      const devices = await prisma.rachioDevice.findMany({
+        where: { id: { in: Array.from(deviceIdsToFetch) } },
+        select: { id: true, name: true },
+      });
+      devices.forEach(device => {
+        devicesMap.set(device.id, device.name);
+      });
+    }
+    
     // Transform audit logs to history entries
-    const history = auditLogs.map(log => {
+    const history = auditLogs.map((log) => {
       const details = log.details as any;
       
       // Determine type and extract relevant information
       const isSchedule = log.source === 'rachio_schedule';
+      const isManual = log.source === 'api';
+      
+      // Enrich actions with zone/device names using batch-fetched data
+      let deviceName = details.deviceName || null;
+      let zoneName = details.zoneName || null;
+      
+      // For automation-triggered entries, extract zone info from resultDetails
+      if (log.action === 'automation_triggered' && details.resultDetails) {
+        const resultDetails = details.resultDetails as any;
+        if (resultDetails.zones && Array.isArray(resultDetails.zones) && resultDetails.zones.length > 0) {
+          // Use zone info from resultDetails if available
+          const firstZone = resultDetails.zones[0];
+          zoneName = firstZone.zoneName || zoneName;
+          deviceName = firstZone.deviceName || deviceName;
+        } else if (resultDetails.successfulZoneIds && Array.isArray(resultDetails.successfulZoneIds) && resultDetails.successfulZoneIds.length > 0 && !zoneName) {
+          // Fallback: Use batch-fetched zone data
+          const zoneData = zonesMap.get(resultDetails.successfulZoneIds[0]);
+          if (zoneData) {
+            zoneName = zoneData.name;
+            deviceName = zoneData.deviceName || deviceName;
+          }
+        }
+      }
+      
+      // Fallback enrichment for older entries using batch-fetched data
+      if (!zoneName && details.zoneId) {
+        const zoneData = zonesMap.get(details.zoneId);
+        if (zoneData) {
+          zoneName = zoneData.name;
+          deviceName = zoneData.deviceName || deviceName;
+        }
+      }
+      
+      if (!deviceName && details.deviceId) {
+        const deviceData = devicesMap.get(details.deviceId);
+        if (deviceData) {
+          deviceName = deviceData;
+        }
+      }
+      
+      // Extract minutes from resultDetails if not present
+      let minutes = details.minutes || null;
+      if (!minutes && details.resultDetails?.durationSec) {
+        minutes = Math.round(details.resultDetails.durationSec / 60);
+      }
       
       return {
         id: log.id,
-        timestamp: log.timestamp,
+        timestamp: log.timestamp.toISOString(),
         type: isSchedule ? 'schedule' : 'automation',
         action: log.action,
-        name: details.ruleName || details.scheduleName || 'Unknown',
+        name: details.ruleName || details.scheduleName || (isManual ? 'Manual Action' : 'Unknown'),
         ruleId: details.ruleId || null,
         scheduleId: details.scheduleId || null,
         deviceId: details.deviceId || null,
-        deviceName: details.deviceName || null,
+        deviceName: deviceName,
         completed: details.completed ?? true,
         // Weather stats
         temperature: details.temperature ?? null,
@@ -248,10 +363,13 @@ router.get('/history', async (req: Request, res: Response) => {
         } : {
           action: details.action || log.action,
           hours: details.hours || null,
-          minutes: details.minutes || null,
-          zoneIds: details.zoneIds || [],
-          deviceIds: details.successfulDeviceIds || [],
+          minutes: minutes,
+          zoneIds: details.zoneIds || (details.resultDetails?.successfulZoneIds || (details.zoneId ? [details.zoneId] : [])).filter(Boolean),
+          deviceIds: details.successfulDeviceIds || (details.deviceId ? [details.deviceId] : []).filter(Boolean),
           resultDetails: details.resultDetails || null,
+          zoneName: zoneName || null,
+          // Include zone info from resultDetails for automation-triggered entries
+          zones: details.resultDetails?.zones || null,
         },
       };
     });
