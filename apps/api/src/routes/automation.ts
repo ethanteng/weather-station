@@ -191,6 +191,12 @@ router.get('/history', async (req: Request, res: Response) => {
               in: ['set_rain_delay', 'run_zone'],
             },
           },
+          {
+            source: 'wunderground',
+            action: {
+              in: ['wu_upload', 'wu_upload_failed', 'wu_upload_skipped'],
+            },
+          },
         ],
       },
     });
@@ -213,6 +219,12 @@ router.get('/history', async (req: Request, res: Response) => {
             source: 'api',
             action: {
               in: ['set_rain_delay', 'run_zone'],
+            },
+          },
+          {
+            source: 'wunderground',
+            action: {
+              in: ['wu_upload', 'wu_upload_failed', 'wu_upload_skipped'],
             },
           },
         ],
@@ -289,6 +301,7 @@ router.get('/history', async (req: Request, res: Response) => {
       // Determine type and extract relevant information
       const isSchedule = log.source === 'rachio_schedule';
       const isManual = log.source === 'api';
+      const isWunderground = log.source === 'wunderground';
       
       // Enrich actions with zone/device names using batch-fetched data
       let deviceName = details.deviceName || null;
@@ -334,6 +347,40 @@ router.get('/history', async (req: Request, res: Response) => {
         minutes = Math.round(details.resultDetails.durationSec / 60);
       }
       
+      // Handle WU upload entries specially
+      if (isWunderground) {
+        return {
+          id: log.id,
+          timestamp: log.timestamp.toISOString(),
+          type: 'automation' as const,
+          action: log.action,
+          name: 'Weather Underground Upload',
+          ruleId: null,
+          scheduleId: null,
+          deviceId: null,
+          deviceName: null,
+          completed: log.action === 'wu_upload',
+          // Weather stats
+          temperature: details.temperature ?? null,
+          humidity: details.humidity ?? null,
+          pressure: details.pressure ?? null,
+          rain24h: details.rain24h ?? null,
+          rain1h: details.rain1h ?? null,
+          soilMoisture: null,
+          soilMoistureValues: null,
+          // Action-specific details
+          actionDetails: {
+            action: log.action,
+            wuResponse: details.wuResponse || null,
+            computedFields: details.computedFields || null,
+            payload: details.payload || null,
+            error: details.error || null,
+            skipped: log.action === 'wu_upload_skipped',
+            reason: details.reason || null,
+          },
+        };
+      }
+
       return {
         id: log.id,
         timestamp: log.timestamp.toISOString(),

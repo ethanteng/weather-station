@@ -184,6 +184,10 @@ export class EcowittClient {
           api_key: this.apiKey,
           mac: macAddress,
           call_back: 'all', // Request all available data
+          // Request Imperial units
+          temp_unitid: '2', // Fahrenheit
+          pressure_unitid: '4', // inHg
+          rainfall_unitid: '13', // inches
         },
       });
 

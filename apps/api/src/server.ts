@@ -7,6 +7,7 @@ import rachioRoutes from './routes/rachio';
 import automationRoutes from './routes/automation';
 import forecastRoutes from './routes/forecast';
 import sensorRoutes from './routes/sensors';
+import integrationsRoutes from './routes/integrations';
 import { startScheduler } from './jobs/scheduler';
 
 dotenv.config();
@@ -29,6 +30,7 @@ export function createServer(): Express {
   app.use('/api/automations', simpleAuth, automationRoutes);
   app.use('/api/forecast', simpleAuth, forecastRoutes);
   app.use('/api/sensors', simpleAuth, sensorRoutes);
+  app.use('/api/integrations', simpleAuth, integrationsRoutes);
 
   return app;
 }

@@ -204,7 +204,9 @@ export default function HistoryPage() {
                     <div
                       key={entry.id}
                       className={`bg-white rounded-xl shadow-md border transition-all duration-200 hover:shadow-lg ${
-                        entry.type === 'schedule'
+                        entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped'
+                          ? 'border-blue-200 bg-gradient-to-r from-blue-50/50 to-cyan-50/50'
+                          : entry.type === 'schedule'
                           ? 'border-indigo-200 bg-gradient-to-r from-indigo-50/50 to-purple-50/50'
                           : 'border-green-200'
                       }`}
@@ -215,12 +217,21 @@ export default function HistoryPage() {
                             <div className="flex items-center gap-3 mb-2">
                               <span
                                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                  entry.type === 'schedule'
+                                  entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                    : entry.type === 'schedule'
                                     ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
                                     : 'bg-green-100 text-green-800 border border-green-300'
                                 }`}
                               >
-                                {entry.type === 'schedule' ? (
+                                {entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped' ? (
+                                  <>
+                                    <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                                    </svg>
+                                    WU Upload
+                                  </>
+                                ) : entry.type === 'schedule' ? (
                                   <>
                                     <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -265,6 +276,43 @@ export default function HistoryPage() {
                                       <span className="font-semibold">Duration:</span>{' '}
                                       {formatDuration(entry.actionDetails.totalDurationMinutes)} (
                                       {formatTime(entry.actionDetails.startTime)} - {formatTime(entry.actionDetails.finishTime)})
+                                    </div>
+                                  )}
+                                </div>
+                              ) : entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped' ? (
+                                <div className="space-y-2">
+                                  <div className="text-sm text-slate-700">
+                                    <span className="font-semibold">Status:</span>{' '}
+                                    {entry.action === 'wu_upload' ? (
+                                      <span className="text-green-700 font-semibold">Upload successful</span>
+                                    ) : entry.action === 'wu_upload_skipped' ? (
+                                      <span className="text-yellow-700 font-semibold">Skipped (no material change)</span>
+                                    ) : (
+                                      <span className="text-red-700 font-semibold">Upload failed</span>
+                                    )}
+                                  </div>
+                                  {entry.actionDetails.wuResponse && (
+                                    <div className="text-sm text-slate-700">
+                                      <span className="font-semibold">WU Response:</span>{' '}
+                                      <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">{entry.actionDetails.wuResponse}</code>
+                                    </div>
+                                  )}
+                                  {entry.actionDetails.error && (
+                                    <div className="text-sm text-red-700">
+                                      <span className="font-semibold">Error:</span> {entry.actionDetails.error}
+                                    </div>
+                                  )}
+                                  {entry.actionDetails.reason && (
+                                    <div className="text-sm text-slate-600">
+                                      <span className="font-semibold">Reason:</span> {entry.actionDetails.reason}
+                                    </div>
+                                  )}
+                                  {entry.actionDetails.computedFields && (
+                                    <div className="text-xs text-slate-600 mt-2">
+                                      <span className="font-semibold">Computed fields:</span>{' '}
+                                      {Object.entries(entry.actionDetails.computedFields as Record<string, number>)
+                                        .map(([key, value]) => `${key}: ${value.toFixed(2)}`)
+                                        .join(', ')}
                                     </div>
                                   )}
                                 </div>

@@ -165,6 +165,51 @@ Rules are evaluated every 5 minutes. Safety features:
 - All actions are logged to audit log
 - All watering events are stored in database
 
+## Weather Underground Export
+
+The system can automatically upload weather data to Weather Underground Personal Weather Station (PWS).
+
+### Configuration
+
+Add these environment variables to enable WU uploads:
+
+```bash
+WU_ENABLED=true
+WU_STATION_ID=your_station_id
+WU_API_KEY=your_api_key
+WU_INTERVAL_SECONDS=300  # Optional, default 300 (5 minutes)
+```
+
+### Verification
+
+Once enabled, check your station dashboard:
+- https://www.wunderground.com/dashboard/pws/<STATION_ID>
+
+### Test Endpoint
+
+Test the integration manually:
+```bash
+curl -X POST http://localhost:3001/api/integrations/wunderground/test \
+  -H "Authorization: Bearer <ADMIN_PASSWORD>"
+```
+
+### Data Uploaded
+
+Only public weather data is uploaded (already in Imperial units):
+- Temperature (°F)
+- Humidity (%)
+- Pressure (inHg, absolute)
+- Rainfall (inches)
+
+Soil moisture and irrigation data are NOT uploaded.
+
+### History
+
+WU upload attempts are logged and visible in the `/history` page:
+- Successful uploads show as "Weather Underground Upload" with green status
+- Failed uploads show error details
+- Skipped uploads (no material change) are also logged
+
 ## Dashboard
 
 The dashboard displays:
