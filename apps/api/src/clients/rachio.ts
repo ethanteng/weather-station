@@ -168,6 +168,9 @@ export class RachioClient {
   // Static cache shared across all instances - person data rarely changes
   private static cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
   private static readonly PERSON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours cache
+  // Static cache for schedules per device - refresh every 6 hours
+  private static cachedSchedules: Map<string, { data: RachioSchedule[]; timestamp: number }> = new Map();
+  private static readonly SCHEDULES_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours cache
 
   constructor(apiKey: string) {
 
@@ -448,16 +451,23 @@ export class RachioClient {
    * @param deviceId Device ID
    */
   async getSchedules(deviceId: string): Promise<RachioSchedule[]> {
+    // Check static cache first (shared across all instances)
+    const cached = RachioClient.cachedSchedules.get(deviceId);
+    if (cached && Date.now() - cached.timestamp < RachioClient.SCHEDULES_CACHE_TTL) {
+      // Return cached data without making API call
+      return cached.data;
+    }
+
     try {
       const response = await this.client.get(`/device/${deviceId}`);
       const scheduleRules = response.data?.scheduleRules || [];
       
-      // Debug: Log raw schedule data to understand structure
+      // Debug: Log raw schedule data to understand structure (only on cache miss)
       if (scheduleRules.length > 0) {
-        console.log(`[DEBUG] Raw Rachio schedule data for device ${deviceId}:`, JSON.stringify(scheduleRules[0], null, 2));
+        console.log(`[DEBUG] Raw Rachio schedule data for device ${deviceId} (cache miss):`, JSON.stringify(scheduleRules[0], null, 2));
       }
       
-      return scheduleRules.map((schedule: any) => {
+      const schedules = scheduleRules.map((schedule: any) => {
         // Extract weather intelligence fields
         const weatherIntelligence: RachioWeatherIntelligence = {};
         if (schedule.rainSkip !== undefined) weatherIntelligence.rainSkip = schedule.rainSkip === true;
@@ -527,6 +537,14 @@ export class RachioClient {
           externalName: schedule.externalName,
         };
       });
+      
+      // Cache the result in static cache (shared across all instances)
+      RachioClient.cachedSchedules.set(deviceId, {
+        data: schedules,
+        timestamp: Date.now(),
+      });
+      
+      return schedules;
     } catch (error) {
       // Don't wrap RachioRateLimitError - let it propagate as-is
       if (error instanceof RachioRateLimitError) {
