@@ -329,6 +329,20 @@ export const rachioApi = {
   },
 };
 
+type ScheduleZone = {
+  zoneId: string;
+  zoneName: string;
+  durationSec: number;
+  durationMinutes: number;
+};
+
+type AutomationZone = {
+  zoneId: string;
+  zoneName: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
+};
+
 export interface AutomationHistoryEntry {
   id: string;
   timestamp: string;
@@ -349,12 +363,6 @@ export interface AutomationHistoryEntry {
   soilMoistureValues?: Record<string, number> | null;
   actionDetails: {
     // For schedules
-    zones?: Array<{
-      zoneId: string;
-      zoneName: string;
-      durationSec: number;
-      durationMinutes: number;
-    }>;
     startTime?: string | null;
     finishTime?: string | null;
     totalDurationSec?: number | null;
@@ -367,12 +375,8 @@ export interface AutomationHistoryEntry {
     deviceIds?: string[];
     resultDetails?: Record<string, unknown>;
     zoneName?: string | null;
-    zones?: Array<{
-      zoneId: string;
-      zoneName: string;
-      deviceId?: string | null;
-      deviceName?: string | null;
-    }> | null;
+    // Union type for zones - can be either schedule zones or automation zones
+    zones?: Array<ScheduleZone | AutomationZone> | null;
   };
 }
 
