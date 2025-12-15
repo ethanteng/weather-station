@@ -190,9 +190,9 @@ export interface AutomationRule {
       | { operator: '>=' | '<=' | '>' | '<' | '=='; value: number } // Old format (backward compatibility)
       | SoilMoistureCondition; // New format (multiple sensors)
     rain1h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
-    temperature?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
-    humidity?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
-    pressure?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    temperature?: { operator: '>=' | '<=' | '>' | '<' | '==' | 'trend'; value?: number; trend?: 'increasing' | 'decreasing' };
+    humidity?: { operator: '>=' | '<=' | '>' | '<' | '==' | 'trend'; value?: number; trend?: 'increasing' | 'decreasing' };
+    pressure?: { operator: '>=' | '<=' | '>' | '<' | '==' | 'trend'; value?: number; trend?: 'increasing' | 'decreasing' };
   };
   actions: {
     type: 'set_rain_delay' | 'run_zone';

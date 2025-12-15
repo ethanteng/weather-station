@@ -713,22 +713,46 @@ function RuleView({
       });
     }
     if (rule.conditions.temperature) {
-      conditions.push({
-        label: 'Temperature',
-        value: `${rule.conditions.temperature.operator} ${rule.conditions.temperature.value}°F`,
-      });
+      const tempCond = rule.conditions.temperature;
+      if (tempCond.operator === 'trend') {
+        conditions.push({
+          label: 'Temperature',
+          value: `Trend: ${tempCond.trend === 'increasing' ? 'Increasing' : 'Decreasing'} (7 days)`,
+        });
+      } else {
+        conditions.push({
+          label: 'Temperature',
+          value: `${tempCond.operator} ${tempCond.value}°F`,
+        });
+      }
     }
     if (rule.conditions.humidity) {
-      conditions.push({
-        label: 'Humidity',
-        value: `${rule.conditions.humidity.operator} ${rule.conditions.humidity.value}%`,
-      });
+      const humCond = rule.conditions.humidity;
+      if (humCond.operator === 'trend') {
+        conditions.push({
+          label: 'Humidity',
+          value: `Trend: ${humCond.trend === 'increasing' ? 'Increasing' : 'Decreasing'} (7 days)`,
+        });
+      } else {
+        conditions.push({
+          label: 'Humidity',
+          value: `${humCond.operator} ${humCond.value}%`,
+        });
+      }
     }
     if (rule.conditions.pressure) {
-      conditions.push({
-        label: 'Pressure',
-        value: `${rule.conditions.pressure.operator} ${rule.conditions.pressure.value} inHg`,
-      });
+      const pressCond = rule.conditions.pressure;
+      if (pressCond.operator === 'trend') {
+        conditions.push({
+          label: 'Pressure',
+          value: `Trend: ${pressCond.trend === 'increasing' ? 'Increasing' : 'Decreasing'} (7 days)`,
+        });
+      } else {
+        conditions.push({
+          label: 'Pressure',
+          value: `${pressCond.operator} ${pressCond.value} inHg`,
+        });
+      }
     }
     return conditions;
   };
@@ -1317,7 +1341,7 @@ function RuleEditor({
     onSave(ruleData);
   };
 
-  const updateCondition = (field: string, operator: string, value: string) => {
+  const updateCondition = (field: string, operator: string, value: string, trend?: 'increasing' | 'decreasing') => {
     if (field === 'soilMoisture') {
       // Soil moisture is now handled via selectedSensors, skip legacy handling
       // This condition is kept for backward compatibility but shouldn't be called
@@ -1325,15 +1349,28 @@ function RuleEditor({
       // If operator is set, create/update the condition (even if value is empty)
       // If operator is empty, remove the condition
       if (operator) {
-        const currentCondition = conditions[field as keyof typeof conditions] as { operator: string; value: number } | undefined;
-        const numericValue = value ? parseFloat(value) : (currentCondition?.value ?? 0);
-        setConditions({
-          ...conditions,
-          [field]: { 
-            operator: operator as any, 
-            value: numericValue
-          },
-        });
+        if (operator === 'trend') {
+          // Trend condition doesn't need a numeric value
+          setConditions({
+            ...conditions,
+            [field]: { 
+              operator: 'trend' as any,
+              trend: trend || 'increasing'
+            },
+          });
+        } else {
+          // For numeric operators, ensure we have a valid number
+          const numericValue = value ? parseFloat(value) : 0;
+          // If parseFloat returns NaN, use 0 as default
+          const finalValue = isNaN(numericValue) ? 0 : numericValue;
+          setConditions({
+            ...conditions,
+            [field]: { 
+              operator: operator as any, 
+              value: finalValue
+            },
+          });
+        }
       } else {
         removeCondition(field);
       }
@@ -1611,6 +1648,11 @@ function RuleEditor({
 
             // Regular condition fields
             const condition = conditions[field.key];
+            // Note: trend conditions are only available for temperature, humidity, and pressure
+            // rain24h and rain1h do not support trend conditions (only numeric comparisons)
+            const isTrendField = field.key === 'temperature' || field.key === 'humidity' || field.key === 'pressure';
+            const isTrendOperator = condition?.operator === 'trend';
+            
             return (
               <div key={field.key} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
                 <span className="w-32 text-sm font-medium text-slate-700">{field.label}:</span>
@@ -1618,7 +1660,17 @@ function RuleEditor({
                   value={condition?.operator || ''}
                   onChange={(e) => {
                     if (e.target.value) {
-                      updateCondition(field.key, e.target.value, condition?.value?.toString() || '');
+                      if (e.target.value === 'trend') {
+                        updateCondition(field.key, 'trend', '', 'increasing');
+                      } else {
+                        // When switching from trend to numeric operator, condition.value may not exist
+                        // Use a default value of 0 if condition.value is undefined or NaN
+                        const currentValue = condition?.value;
+                        const valueStr = (currentValue !== undefined && currentValue !== null && !isNaN(currentValue))
+                          ? currentValue.toString()
+                          : '0';
+                        updateCondition(field.key, e.target.value, valueStr);
+                      }
                     } else {
                       removeCondition(field.key);
                     }
@@ -1631,8 +1683,22 @@ function RuleEditor({
                   <option value=">">&gt; (Greater than)</option>
                   <option value="<">&lt; (Less than)</option>
                   <option value="==">= (Equal to)</option>
+                  {isTrendField && <option value="trend">Trend (7 days)</option>}
                 </select>
-                {condition && (
+                {condition && isTrendOperator && (
+                  <>
+                    <select
+                      value={condition.trend || 'increasing'}
+                      onChange={(e) => updateCondition(field.key, 'trend', '', e.target.value as 'increasing' | 'decreasing')}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    >
+                      <option value="increasing">Increasing</option>
+                      <option value="decreasing">Decreasing</option>
+                    </select>
+                    <span className="text-xs text-slate-500">(last 7 days)</span>
+                  </>
+                )}
+                {condition && !isTrendOperator && (
                   <>
                     <input
                       type="number"

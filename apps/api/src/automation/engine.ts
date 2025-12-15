@@ -13,8 +13,9 @@ interface AutomationResult {
 }
 
 interface Condition {
-  operator: '>=' | '<=' | '>' | '<' | '==';
-  value: number;
+  operator: '>=' | '<=' | '>' | '<' | '==' | 'trend';
+  value?: number; // Optional when operator is 'trend'
+  trend?: 'increasing' | 'decreasing'; // Required when operator is 'trend'
 }
 
 interface SoilMoistureSensorCondition {
@@ -45,6 +46,46 @@ interface Actions {
 }
 
 /**
+ * Calculate linear regression slope from historical data points
+ * Returns the slope (positive = increasing, negative = decreasing)
+ */
+function calculateTrendSlope(
+  dataPoints: Array<{ timestamp: Date; value: number }>
+): number | null {
+  if (dataPoints.length < 2) {
+    return null;
+  }
+
+  // Sort by timestamp to ensure chronological order
+  const sorted = [...dataPoints].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  
+  const n = sorted.length;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumX2 = 0;
+
+  // Use timestamp as x (in milliseconds since epoch) and value as y
+  sorted.forEach((point, index) => {
+    const x = point.timestamp.getTime();
+    const y = point.value;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  });
+
+  // Calculate slope: (n*ΣXY - ΣX*ΣY) / (n*ΣX² - (ΣX)²)
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) {
+    return null;
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  return slope;
+}
+
+/**
  * Evaluate a single condition against weather data
  */
 function evaluateCondition(
@@ -57,10 +98,31 @@ function evaluateCondition(
     temperature: number | null;
     humidity: number | null;
     pressure: number | null;
-  }
+  },
+  historicalData?: Array<{ timestamp: Date; value: number }>
 ): boolean {
+  // Handle trend operator
+  if (condition.operator === 'trend') {
+    if (!condition.trend || !historicalData || historicalData.length < 2) {
+      return false;
+    }
+
+    const slope = calculateTrendSlope(historicalData);
+    if (slope === null) {
+      return false;
+    }
+
+    if (condition.trend === 'increasing') {
+      return slope > 0;
+    } else if (condition.trend === 'decreasing') {
+      return slope < 0;
+    }
+    return false;
+  }
+
+  // Handle numeric operators
   const value = weather[field];
-  if (value === null || value === undefined) {
+  if (value === null || value === undefined || condition.value === undefined) {
     return false;
   }
 
@@ -146,7 +208,12 @@ function evaluateConditions(
     humidity: number | null;
     pressure: number | null;
   },
-  soilMoistureValues?: Record<string, number> | null
+  soilMoistureValues?: Record<string, number> | null,
+  historicalData?: {
+    temperature?: Array<{ timestamp: Date; value: number }>;
+    humidity?: Array<{ timestamp: Date; value: number }>;
+    pressure?: Array<{ timestamp: Date; value: number }>;
+  }
 ): boolean {
   // All conditions must be true (AND logic)
   for (const [field, condition] of Object.entries(conditions)) {
@@ -167,7 +234,23 @@ function evaluateConditions(
       }
     } else {
       // Regular condition evaluation
-      if (!evaluateCondition(field as keyof Conditions, condition as Condition, weather)) {
+      const fieldKey = field as keyof Conditions;
+      const conditionData = condition as Condition;
+      
+      // Get historical data for trend evaluation if needed
+      // Note: trend conditions are only supported for temperature, humidity, and pressure
+      let fieldHistoricalData: Array<{ timestamp: Date; value: number }> | undefined;
+      if (conditionData.operator === 'trend' && historicalData) {
+        if (fieldKey === 'temperature' && historicalData.temperature) {
+          fieldHistoricalData = historicalData.temperature;
+        } else if (fieldKey === 'humidity' && historicalData.humidity) {
+          fieldHistoricalData = historicalData.humidity;
+        } else if (fieldKey === 'pressure' && historicalData.pressure) {
+          fieldHistoricalData = historicalData.pressure;
+        }
+      }
+      
+      if (!evaluateCondition(fieldKey, conditionData, weather, fieldHistoricalData)) {
         return false;
       }
     }
@@ -410,6 +493,51 @@ export async function evaluateRules(): Promise<void> {
       ? (latestWeather.soilMoistureValues as Record<string, number>)
       : null;
 
+    // Check if any rule uses trend conditions - if so, fetch historical data
+    // Note: trend conditions are only available for temperature, humidity, and pressure
+    const needsHistoricalData = rules.some(rule => {
+      const conditions = rule.conditions as unknown as Conditions;
+      return (
+        (conditions.temperature && (conditions.temperature as Condition).operator === 'trend') ||
+        (conditions.humidity && (conditions.humidity as Condition).operator === 'trend') ||
+        (conditions.pressure && (conditions.pressure as Condition).operator === 'trend')
+      );
+    });
+
+    let historicalData: {
+      temperature?: Array<{ timestamp: Date; value: number }>;
+      humidity?: Array<{ timestamp: Date; value: number }>;
+      pressure?: Array<{ timestamp: Date; value: number }>;
+    } | undefined;
+
+    if (needsHistoricalData) {
+      // Fetch last 7 days of weather readings
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const historicalReadings = await prisma.weatherReading.findMany({
+        where: {
+          timestamp: {
+            gte: sevenDaysAgo,
+          },
+        },
+        orderBy: {
+          timestamp: 'asc',
+        },
+      });
+
+      // Extract data points for each field (only temperature, humidity, and pressure support trends)
+      historicalData = {
+        temperature: historicalReadings
+          .filter(r => r.temperature !== null)
+          .map(r => ({ timestamp: r.timestamp, value: r.temperature! })),
+        humidity: historicalReadings
+          .filter(r => r.humidity !== null)
+          .map(r => ({ timestamp: r.timestamp, value: r.humidity! })),
+        pressure: historicalReadings
+          .filter(r => r.pressure !== null)
+          .map(r => ({ timestamp: r.timestamp, value: r.pressure! })),
+      };
+    }
+
     // Evaluate each rule
     for (const rule of rules) {
       try {
@@ -417,7 +545,7 @@ export async function evaluateRules(): Promise<void> {
         const actions = rule.actions as unknown as Actions;
 
         // Check if conditions are met
-        if (evaluateConditions(conditions, weather, soilMoistureValues)) {
+        if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData)) {
           // Execute the action
           const result = await executeAction(actions, devices, rachioClient, weather);
 

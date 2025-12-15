@@ -258,18 +258,30 @@ export default function Dashboard() {
             value={latestWeather?.temperature || null}
             unit="°F"
             icon="🌡️"
+            trendData={weather7d?.readings.map(r => ({
+              timestamp: r.timestamp,
+              value: r.temperature,
+            }))}
           />
           <WeatherCard
             label="Humidity"
             value={latestWeather?.humidity || null}
             unit="%"
             icon="💧"
+            trendData={weather7d?.readings.map(r => ({
+              timestamp: r.timestamp,
+              value: r.humidity,
+            }))}
           />
           <WeatherCard
             label="Pressure"
             value={latestWeather?.pressure || null}
             unit="inHg"
             icon="📊"
+            trendData={weather7d?.readings.map(r => ({
+              timestamp: r.timestamp,
+              value: r.pressure,
+            }))}
           />
         </div>
 
