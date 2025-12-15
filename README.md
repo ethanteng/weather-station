@@ -171,7 +171,7 @@ The system can automatically upload weather data to Weather Underground Personal
 
 ### Configuration
 
-Add these environment variables to enable WU uploads:
+Add these environment variables to your root `.env` file (same directory as `package.json`) to enable WU uploads:
 
 ```bash
 WU_ENABLED=true
@@ -179,6 +179,8 @@ WU_STATION_ID=your_station_id
 WU_API_KEY=your_api_key
 WU_INTERVAL_SECONDS=300  # Optional, default 300 (5 minutes)
 ```
+
+**Note:** The `.env` file should be in the project root directory, alongside your other environment variables like `ECOWITT_APPLICATION_KEY`, `RACHIO_API_KEY`, etc.
 
 ### Verification
 
