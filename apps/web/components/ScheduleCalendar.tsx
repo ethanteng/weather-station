@@ -42,10 +42,16 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
         scheduleJobTypes: s.scheduleJobTypes,
         interval: s.interval,
         startDate: s.startDate,
+        startDateFormatted: s.startDate ? new Date(s.startDate).toISOString() : null,
         endDate: s.endDate,
+        repeat: s.repeat,
       })),
       totalOccurrences: occurrences.length,
       occurrencesByDateSize: occurrencesByDate.size,
+      occurrencesByDate: Array.from(occurrencesByDate.entries()).map(([date, occs]) => ({
+        date,
+        schedules: occs.map(o => ({ id: o.scheduleId, name: o.scheduleName, isNext: o.isNextOccurrence })),
+      })),
     });
   }, [automations, occurrences, occurrencesByDate]);
 

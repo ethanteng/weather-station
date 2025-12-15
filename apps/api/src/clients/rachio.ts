@@ -452,6 +452,11 @@ export class RachioClient {
       const response = await this.client.get(`/device/${deviceId}`);
       const scheduleRules = response.data?.scheduleRules || [];
       
+      // Debug: Log raw schedule data to understand structure
+      if (scheduleRules.length > 0) {
+        console.log(`[DEBUG] Raw Rachio schedule data for device ${deviceId}:`, JSON.stringify(scheduleRules[0], null, 2));
+      }
+      
       return scheduleRules.map((schedule: any) => {
         // Extract weather intelligence fields
         const weatherIntelligence: RachioWeatherIntelligence = {};

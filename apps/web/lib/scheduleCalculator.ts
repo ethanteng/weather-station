@@ -142,6 +142,18 @@ function calculateScheduleDates(
       startDate: schedule.startDate,
       endDate: schedule.endDate,
       enabled: schedule.enabled,
+      // Log full schedule object to debug
+      fullSchedule: schedule,
+    });
+  }
+  
+  // Debug: Log successful date calculations
+  if (dates.length > 0 && schedule.source === 'rachio') {
+    console.log(`[DEBUG] Calculated ${dates.length} dates for schedule "${schedule.name}":`, {
+      scheduleJobTypes: schedule.scheduleJobTypes,
+      interval: schedule.interval,
+      firstDate: dates[0],
+      lastDate: dates[dates.length - 1],
     });
   }
 
