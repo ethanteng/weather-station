@@ -268,7 +268,7 @@ export default function Dashboard() {
           <WeatherCard
             label="Pressure"
             value={latestWeather?.pressure || null}
-            unit=" hPa"
+            unit="inHg"
             icon="📊"
           />
         </div>

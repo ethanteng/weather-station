@@ -724,6 +724,12 @@ function RuleView({
         value: `${rule.conditions.humidity.operator} ${rule.conditions.humidity.value}%`,
       });
     }
+    if (rule.conditions.pressure) {
+      conditions.push({
+        label: 'Pressure',
+        value: `${rule.conditions.pressure.operator} ${rule.conditions.pressure.value} inHg`,
+      });
+    }
     return conditions;
   };
 
@@ -1424,6 +1430,7 @@ function RuleEditor({
     { key: 'soilMoisture' as const, label: 'Soil Moisture', unit: '%' },
     { key: 'temperature' as const, label: 'Temperature', unit: '°F' },
     { key: 'humidity' as const, label: 'Humidity', unit: '%' },
+    { key: 'pressure' as const, label: 'Pressure', unit: 'inHg' },
   ];
 
   const handleZoneToggle = (zoneId: string) => {

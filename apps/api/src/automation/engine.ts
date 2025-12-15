@@ -34,6 +34,7 @@ interface Conditions {
   rain1h?: Condition;
   temperature?: Condition;
   humidity?: Condition;
+  pressure?: Condition;
 }
 
 interface Actions {
@@ -55,6 +56,7 @@ function evaluateCondition(
     rain1h: number | null;
     temperature: number | null;
     humidity: number | null;
+    pressure: number | null;
   }
 ): boolean {
   const value = weather[field];
@@ -142,6 +144,7 @@ function evaluateConditions(
     rain1h: number | null;
     temperature: number | null;
     humidity: number | null;
+    pressure: number | null;
   },
   soilMoistureValues?: Record<string, number> | null
 ): boolean {
@@ -399,6 +402,7 @@ export async function evaluateRules(): Promise<void> {
       rain1h: latestWeather.rain1h,
       temperature: latestWeather.temperature,
       humidity: latestWeather.humidity,
+      pressure: latestWeather.pressure,
     };
 
     // Extract soil moisture values from JSON field

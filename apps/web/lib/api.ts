@@ -192,6 +192,7 @@ export interface AutomationRule {
     rain1h?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
     temperature?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
     humidity?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
+    pressure?: { operator: '>=' | '<=' | '>' | '<' | '=='; value: number };
   };
   actions: {
     type: 'set_rain_delay' | 'run_zone';
