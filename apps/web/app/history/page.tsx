@@ -10,16 +10,24 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'automation' | 'schedule'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [authToken, setAuthToken] = useState<string>('');
 
   useEffect(() => {
+    const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
+    if (token) {
+      localStorage.setItem('authToken', token);
+      setAuthToken(token);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authToken) return;
+
     const fetchHistory = async () => {
       try {
         setError(null);
         const { setAuthToken: setApiAuth } = await import('../../lib/api');
-        const token = localStorage.getItem('authToken');
-        if (token) {
-          setApiAuth(token);
-        }
+        setApiAuth(authToken);
 
         const response = await automationApi.getHistory(200, 0);
         setEntries(response.entries);
@@ -30,12 +38,8 @@ export default function HistoryPage() {
       }
     };
 
-    const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
-    if (token) {
-      localStorage.setItem('authToken', token);
-      fetchHistory();
-    }
-  }, []);
+    fetchHistory();
+  }, [authToken]);
 
   // Group entries by date
   const groupedEntries = entries.reduce((acc, entry) => {
