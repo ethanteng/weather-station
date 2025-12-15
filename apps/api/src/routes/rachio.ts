@@ -167,6 +167,11 @@ router.post('/zone/run', async (req: Request, res: Response) => {
     const durationSec = minutes * 60;
     await client.runZone(zoneId, durationSec);
 
+    // Get latest weather reading for weather stats
+    const latestWeather = await prisma.weatherReading.findFirst({
+      orderBy: { timestamp: 'desc' },
+    });
+
     // Store watering event
     await prisma.wateringEvent.create({
       data: {
@@ -180,7 +185,7 @@ router.post('/zone/run', async (req: Request, res: Response) => {
       },
     });
 
-    // Log to audit log
+    // Log to audit log with weather stats
     await prisma.auditLog.create({
       data: {
         action: 'run_zone',
@@ -189,6 +194,14 @@ router.post('/zone/run', async (req: Request, res: Response) => {
           durationSec,
           minutes,
           source: 'manual',
+          completed: true,
+          temperature: latestWeather?.temperature ?? null,
+          humidity: latestWeather?.humidity ?? null,
+          pressure: latestWeather?.pressure ?? null,
+          rain24h: latestWeather?.rain24h ?? null,
+          rain1h: latestWeather?.rain1h ?? null,
+          soilMoisture: latestWeather?.soilMoisture ?? null,
+          soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
         },
         source: 'api',
       },

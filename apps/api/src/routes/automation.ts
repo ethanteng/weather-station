@@ -162,6 +162,114 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/automations/history
+ * Get history of automation runs and Rachio schedule runs
+ * Query params: limit (default 100), offset (default 0)
+ */
+router.get('/history', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Get total count of matching records for pagination
+    const total = await prisma.auditLog.count({
+      where: {
+        OR: [
+          {
+            source: 'automation',
+            action: {
+              in: ['automation_triggered', 'set_rain_delay', 'run_zone'],
+            },
+          },
+          {
+            source: 'rachio_schedule',
+            action: 'rachio_schedule_ran',
+          },
+        ],
+      },
+    });
+
+    // Query audit log for automation and schedule runs
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          {
+            source: 'automation',
+            action: {
+              in: ['automation_triggered', 'set_rain_delay', 'run_zone'],
+            },
+          },
+          {
+            source: 'rachio_schedule',
+            action: 'rachio_schedule_ran',
+          },
+        ],
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+      take: limit,
+      skip: offset,
+    });
+
+    // Transform audit logs to history entries
+    const history = auditLogs.map(log => {
+      const details = log.details as any;
+      
+      // Determine type and extract relevant information
+      const isSchedule = log.source === 'rachio_schedule';
+      const isAutomation = log.source === 'automation';
+      
+      return {
+        id: log.id,
+        timestamp: log.timestamp,
+        type: isSchedule ? 'schedule' : 'automation',
+        action: log.action,
+        name: details.ruleName || details.scheduleName || 'Unknown',
+        ruleId: details.ruleId || null,
+        scheduleId: details.scheduleId || null,
+        deviceId: details.deviceId || null,
+        deviceName: details.deviceName || null,
+        completed: details.completed ?? true,
+        // Weather stats
+        temperature: details.temperature ?? null,
+        humidity: details.humidity ?? null,
+        pressure: details.pressure ?? null,
+        rain24h: details.rain24h ?? null,
+        rain1h: details.rain1h ?? null,
+        soilMoisture: details.soilMoisture ?? null,
+        soilMoistureValues: details.soilMoistureValues ?? null,
+        // Action-specific details
+        actionDetails: isSchedule ? {
+          zones: details.zones || [],
+          startTime: details.startTime || null,
+          finishTime: details.finishTime || null,
+          totalDurationSec: details.totalDurationSec || null,
+          totalDurationMinutes: details.totalDurationMinutes || null,
+        } : {
+          action: details.action || log.action,
+          hours: details.hours || null,
+          minutes: details.minutes || null,
+          zoneIds: details.zoneIds || [],
+          deviceIds: details.successfulDeviceIds || [],
+          resultDetails: details.resultDetails || null,
+        },
+      };
+    });
+
+    return res.json({
+      entries: history,
+      total,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    console.error('Error fetching automation history:', error);
+    return res.status(500).json({ error: 'Failed to fetch automation history' });
+  }
+});
+
+/**
  * GET /api/automations/:id
  * Get a single automation rule by ID
  */

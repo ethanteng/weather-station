@@ -268,7 +268,14 @@ async function executeAction(
   weather: {
     rain24h: number | null;
     soilMoisture: number | null;
-  }
+    rain1h: number | null;
+    temperature: number | null;
+    humidity: number | null;
+    pressure: number | null;
+  },
+  soilMoistureValues?: Record<string, number> | null,
+  ruleId?: string,
+  ruleName?: string
 ): Promise<AutomationResult | null> {
   if (actions.type === 'set_rain_delay') {
     if (!actions.hours) {
@@ -288,12 +295,27 @@ async function executeAction(
       try {
         await rachioClient.setRainDelay(device.id, actions.hours);
 
+        // Get latest weather reading for complete weather stats
+        const latestWeather = await prisma.weatherReading.findFirst({
+          orderBy: { timestamp: 'desc' },
+        });
+
         await prisma.auditLog.create({
           data: {
             action: 'set_rain_delay',
             details: {
               deviceId: device.id,
               hours: actions.hours,
+              ruleId: ruleId || null,
+              ruleName: ruleName || null,
+              completed: true,
+              temperature: latestWeather?.temperature ?? null,
+              humidity: latestWeather?.humidity ?? null,
+              pressure: latestWeather?.pressure ?? null,
+              rain24h: latestWeather?.rain24h ?? null,
+              rain1h: latestWeather?.rain1h ?? null,
+              soilMoisture: latestWeather?.soilMoisture ?? null,
+              soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
             },
             source: 'automation',
           },
@@ -378,6 +400,11 @@ async function executeAction(
       try {
         await rachioClient.runZone(zoneId, durationSec);
 
+        // Get latest weather reading for complete weather stats
+        const latestWeather = await prisma.weatherReading.findFirst({
+          orderBy: { timestamp: 'desc' },
+        });
+
         await prisma.wateringEvent.create({
           data: {
             zoneId: zoneId,
@@ -386,6 +413,8 @@ async function executeAction(
             rawPayload: {
               soilMoisture: weather.soilMoisture,
               rain24h: weather.rain24h,
+              ruleId: ruleId || null,
+              ruleName: ruleName || null,
             },
           },
         });
@@ -396,8 +425,17 @@ async function executeAction(
             details: {
               zoneId: zoneId,
               durationSec,
-              soilMoisture: weather.soilMoisture,
-              rain24h: weather.rain24h,
+              minutes: Math.round(durationSec / 60),
+              ruleId: ruleId || null,
+              ruleName: ruleName || null,
+              completed: true,
+              temperature: latestWeather?.temperature ?? null,
+              humidity: latestWeather?.humidity ?? null,
+              pressure: latestWeather?.pressure ?? null,
+              rain24h: latestWeather?.rain24h ?? null,
+              rain1h: latestWeather?.rain1h ?? null,
+              soilMoisture: latestWeather?.soilMoisture ?? null,
+              soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
             },
             source: 'automation',
           },
@@ -478,7 +516,7 @@ export async function evaluateRules(): Promise<void> {
 
     const results: AutomationResult[] = [];
 
-    // Prepare weather data for condition evaluation
+    // Prepare weather data for condition evaluation and action execution
     const weather = {
       rain24h: latestWeather.rain24h,
       soilMoisture: latestWeather.soilMoisture,
@@ -547,7 +585,7 @@ export async function evaluateRules(): Promise<void> {
         // Check if conditions are met
         if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData)) {
           // Execute the action
-          const result = await executeAction(actions, devices, rachioClient, weather);
+          const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues, rule.id, rule.name);
 
           if (result) {
             results.push({
@@ -562,6 +600,28 @@ export async function evaluateRules(): Promise<void> {
               data: {
                 lastRunAt: new Date(),
                 lastResult: JSON.stringify(result),
+              },
+            });
+
+            // Create summary audit log entry for the triggered automation
+            await prisma.auditLog.create({
+              data: {
+                action: 'automation_triggered',
+                details: {
+                  ruleId: rule.id,
+                  ruleName: rule.name,
+                  action: result.action,
+                  completed: true,
+                  temperature: latestWeather.temperature,
+                  humidity: latestWeather.humidity,
+                  pressure: latestWeather.pressure,
+                  rain24h: latestWeather.rain24h,
+                  rain1h: latestWeather.rain1h,
+                  soilMoisture: latestWeather.soilMoisture,
+                  soilMoistureValues: latestWeather.soilMoistureValues,
+                  resultDetails: result.details,
+                },
+                source: 'automation',
               },
             });
           }

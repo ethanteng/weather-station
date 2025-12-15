@@ -329,6 +329,53 @@ export const rachioApi = {
   },
 };
 
+export interface AutomationHistoryEntry {
+  id: string;
+  timestamp: string;
+  type: 'automation' | 'schedule';
+  action: string;
+  name: string;
+  ruleId?: string | null;
+  scheduleId?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  completed: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  pressure: number | null;
+  rain24h: number | null;
+  rain1h: number | null;
+  soilMoisture: number | null;
+  soilMoistureValues?: Record<string, number> | null;
+  actionDetails: {
+    // For schedules
+    zones?: Array<{
+      zoneId: string;
+      zoneName: string;
+      durationSec: number;
+      durationMinutes: number;
+    }>;
+    startTime?: string | null;
+    finishTime?: string | null;
+    totalDurationSec?: number | null;
+    totalDurationMinutes?: number | null;
+    // For automations
+    action?: string;
+    hours?: number | null;
+    minutes?: number | null;
+    zoneIds?: string[];
+    deviceIds?: string[];
+    resultDetails?: Record<string, unknown>;
+  };
+}
+
+export interface AutomationHistoryResponse {
+  entries: AutomationHistoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export const automationApi = {
   async getRules(): Promise<AutomationRule[] | { rules: AutomationRule[]; rateLimitError?: any }> {
     const response = await api.get<AutomationRule[] | { rules: AutomationRule[]; rateLimitError?: any }>('/api/automations');
@@ -366,6 +413,14 @@ export const automationApi = {
 
   async run(): Promise<void> {
     await api.post('/api/automations/run');
+  },
+
+  async getHistory(limit?: number, offset?: number): Promise<AutomationHistoryResponse> {
+    const params: Record<string, string> = {};
+    if (limit !== undefined) params.limit = limit.toString();
+    if (offset !== undefined) params.offset = offset.toString();
+    const response = await api.get<AutomationHistoryResponse>('/api/automations/history', { params });
+    return response.data;
   },
 };
 
