@@ -147,10 +147,18 @@ export function getRachioRateLimitStatus(): {
   limit: number | null;
 } {
   const resetTime = rateLimitTracker.getResetTime();
+  const remaining = rateLimitTracker.getRemaining();
+  
+  // Rate limited if:
+  // 1. We have a resetTime set (from a 429 error), OR
+  // 2. We have 0 or fewer calls remaining
+  const rateLimited = (resetTime !== null && new Date() < resetTime) || 
+                      (remaining !== null && remaining <= 0);
+  
   return {
-    rateLimited: resetTime !== null && new Date() < resetTime,
+    rateLimited,
     resetTime,
-    remaining: rateLimitTracker.getRemaining(),
+    remaining,
     limit: rateLimitTracker.getLimit(),
   };
 }
@@ -213,19 +221,25 @@ export class RachioClient {
           if (!isNaN(remainingNum) && !isNaN(limitNum)) {
             rateLimitTracker.setRateLimitInfo(remainingNum, limitNum);
             
+            // Only mark as rate limited if remaining is 0 or less
+            // The reset header is informational and sent with every response,
+            // so we only use it when we're actually out of calls
+            if (remainingNum <= 0 && reset) {
+              try {
+                const resetDate = new Date(reset);
+                rateLimitTracker.setResetTime(resetDate);
+              } catch (e) {
+                console.warn('Failed to parse rate limit reset time:', reset);
+              }
+            } else {
+              // Clear reset time if we have calls remaining (not rate limited)
+              // This ensures we don't show "rate limited" when we have calls left
+              rateLimitTracker.setResetTime(null);
+            }
+            
             if (remainingNum < 100) {
               console.warn(`Rachio API rate limit warning: ${remainingNum}/${limitNum} requests remaining`);
             }
-          }
-        }
-        
-        // Update reset time if provided (using shared tracker)
-        if (reset) {
-          try {
-            const resetDate = new Date(reset);
-            rateLimitTracker.setResetTime(resetDate);
-          } catch (e) {
-            console.warn('Failed to parse rate limit reset time:', reset);
           }
         }
         
