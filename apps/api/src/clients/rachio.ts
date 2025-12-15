@@ -165,8 +165,9 @@ export function getRachioRateLimitStatus(): {
 
 export class RachioClient {
   private client: AxiosInstance;
-  private cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
-  private readonly PERSON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours cache - person data rarely changes
+  // Static cache shared across all instances - person data rarely changes
+  private static cachedPerson: { data: RachioPerson; timestamp: number } | null = null;
+  private static readonly PERSON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours cache
 
   constructor(apiKey: string) {
 
@@ -307,17 +308,18 @@ export class RachioClient {
    * Cached for 1 hour to reduce API calls
    */
   async getPerson(): Promise<RachioPerson> {
-    // Check cache first
-    if (this.cachedPerson && Date.now() - this.cachedPerson.timestamp < this.PERSON_CACHE_TTL) {
-      return this.cachedPerson.data;
+    // Check static cache first (shared across all instances)
+    if (RachioClient.cachedPerson && Date.now() - RachioClient.cachedPerson.timestamp < RachioClient.PERSON_CACHE_TTL) {
+      // Return cached data without making API call
+      return RachioClient.cachedPerson.data;
     }
 
     try {
       const response = await this.client.get('/person/info');
-      console.log('Rachio person response:', JSON.stringify(response.data, null, 2));
+      console.log('Rachio person API call (cache miss):', JSON.stringify(response.data, null, 2));
       
-      // Cache the result
-      this.cachedPerson = {
+      // Cache the result in static cache (shared across all instances)
+      RachioClient.cachedPerson = {
         data: response.data,
         timestamp: Date.now(),
       };

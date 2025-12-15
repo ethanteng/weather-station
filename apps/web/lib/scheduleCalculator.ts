@@ -55,23 +55,34 @@ function calculateScheduleDates(
   const dates: string[] = [];
   
   // Check if schedule has an endDate that's already passed
+  // Rachio API returns timestamps in milliseconds (e.g., 1437677593983)
   if (schedule.endDate) {
-    const scheduleEndDate = new Date(schedule.endDate * 1000);
+    const scheduleEndDate = new Date(schedule.endDate);
     if (scheduleEndDate < startDate) {
       return dates; // Schedule has ended
     }
   }
 
   // Determine the effective start date
-  let effectiveStartDate = startDate;
+  let effectiveStartDate = new Date(startDate);
+  effectiveStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
+  
   if (schedule.startDate) {
-    const scheduleStartDate = new Date(schedule.startDate * 1000);
-    if (scheduleStartDate > startDate) {
+    // Rachio API returns timestamps in milliseconds (e.g., 1437677593983)
+    const scheduleStartDate = new Date(schedule.startDate);
+    scheduleStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
+    if (scheduleStartDate > effectiveStartDate) {
       effectiveStartDate = scheduleStartDate;
     }
   }
 
+  // Normalize endDate to end of day for comparison
+  const effectiveEndDate = new Date(endDate);
+  effectiveEndDate.setHours(23, 59, 59, 999);
+
   // Handle different schedule types
+  let calculatedDates = false;
+  
   if (schedule.scheduleJobTypes && schedule.scheduleJobTypes.length > 0) {
     const jobType = schedule.scheduleJobTypes[0];
     
@@ -79,18 +90,59 @@ function calculateScheduleDates(
       // Interval-based schedule (e.g., every 14 days)
       const interval = parseInt(jobType.replace('INTERVAL_', ''), 10);
       if (!isNaN(interval) && interval > 0) {
-        dates.push(...calculateIntervalDates(effectiveStartDate, endDate, interval, schedule.endDate));
+        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate));
+        calculatedDates = true;
       }
     } else if (jobType.startsWith('DAY_OF_WEEK_')) {
       // Day of week schedule (e.g., every Wednesday)
       const dayOfWeek = parseInt(jobType.replace('DAY_OF_WEEK_', ''), 10);
       if (!isNaN(dayOfWeek) && dayOfWeek >= 0 && dayOfWeek <= 6) {
-        dates.push(...calculateDayOfWeekDates(effectiveStartDate, endDate, dayOfWeek, schedule.endDate));
+        dates.push(...calculateDayOfWeekDates(effectiveStartDate, effectiveEndDate, dayOfWeek, schedule.endDate));
+        calculatedDates = true;
       }
     }
-  } else if (schedule.interval && schedule.interval > 0) {
-    // Fallback to interval if scheduleJobTypes not available
-    dates.push(...calculateIntervalDates(effectiveStartDate, endDate, schedule.interval, schedule.endDate));
+  }
+  
+  // Fallback to interval if scheduleJobTypes not available or didn't match
+  if (!calculatedDates && schedule.interval && schedule.interval > 0) {
+    dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, schedule.interval, schedule.endDate));
+    calculatedDates = true;
+  }
+  
+  // Try to extract from repeat object if available
+  if (!calculatedDates && schedule.repeat) {
+    const repeat = schedule.repeat;
+    // Check for interval in repeat object
+    if (repeat.interval && typeof repeat.interval === 'number' && repeat.interval > 0) {
+      dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, repeat.interval, schedule.endDate));
+      calculatedDates = true;
+    }
+    // Check for daysOfWeek in repeat object
+    else if (repeat.daysOfWeek && Array.isArray(repeat.daysOfWeek) && repeat.daysOfWeek.length > 0) {
+      // Handle multiple days of week
+      for (const dayOfWeek of repeat.daysOfWeek) {
+        if (typeof dayOfWeek === 'number' && dayOfWeek >= 0 && dayOfWeek <= 6) {
+          dates.push(...calculateDayOfWeekDates(effectiveStartDate, effectiveEndDate, dayOfWeek, schedule.endDate));
+        }
+      }
+      // Remove duplicates and sort
+      dates = [...new Set(dates)].sort();
+      calculatedDates = true;
+    }
+  }
+
+  // Debug: Log if no dates were calculated
+  if (dates.length === 0 && schedule.source === 'rachio') {
+    console.warn('No dates calculated for schedule:', {
+      id: schedule.id,
+      name: schedule.name,
+      scheduleJobTypes: schedule.scheduleJobTypes,
+      interval: schedule.interval,
+      repeat: schedule.repeat,
+      startDate: schedule.startDate,
+      endDate: schedule.endDate,
+      enabled: schedule.enabled,
+    });
   }
 
   return dates;
@@ -132,10 +184,19 @@ function calculateDayOfWeekDates(
 ): string[] {
   const dates: string[] = [];
   const currentDate = new Date(startDate);
+  currentDate.setHours(0, 0, 0, 0); // Normalize to start of day
   
-  const effectiveEndDate = scheduleEndDate
-    ? new Date(Math.min(endDate.getTime(), scheduleEndDate * 1000))
-    : endDate;
+  let effectiveEndDate = new Date(endDate);
+  effectiveEndDate.setHours(23, 59, 59, 999); // Normalize to end of day
+  
+  if (scheduleEndDate) {
+    // Rachio API returns timestamps in milliseconds (not seconds)
+    const scheduleEnd = new Date(scheduleEndDate);
+    scheduleEnd.setHours(23, 59, 59, 999);
+    if (scheduleEnd < effectiveEndDate) {
+      effectiveEndDate = scheduleEnd;
+    }
+  }
 
   // Find the first occurrence of the target day of week
   const currentDayOfWeek = currentDate.getDay();
@@ -152,11 +213,14 @@ function calculateDayOfWeekDates(
   // Move to the next occurrence
   const nextDate = new Date(currentDate);
   nextDate.setDate(nextDate.getDate() + daysUntilTarget);
+  nextDate.setHours(0, 0, 0, 0);
 
   // Add all subsequent occurrences
   while (nextDate <= effectiveEndDate) {
     dates.push(formatDate(nextDate));
-    nextDate.setDate(nextDate.getDate() + 7); // Next week
+    const nextWeek = new Date(nextDate);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    nextDate.setTime(nextWeek.getTime());
   }
 
   return dates;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AutomationRule, Forecast16DayResponse, DailyForecast } from '../lib/api';
 import { calculateScheduleOccurrences, groupOccurrencesByDate, ScheduleOccurrence } from '../lib/scheduleCalculator';
@@ -27,6 +27,27 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
   // Calculate schedule occurrences
   const occurrences = calculateScheduleOccurrences(automations, today);
   const occurrencesByDate = groupOccurrencesByDate(occurrences);
+
+  // Debug logging
+  useEffect(() => {
+    const rachioSchedules = automations.filter(r => r.source === 'rachio');
+    console.log('ScheduleCalendar Debug:', {
+      totalAutomations: automations.length,
+      rachioSchedules: rachioSchedules.length,
+      enabledRachioSchedules: rachioSchedules.filter(r => r.enabled).length,
+      scheduleDetails: rachioSchedules.map(s => ({
+        id: s.id,
+        name: s.name,
+        enabled: s.enabled,
+        scheduleJobTypes: s.scheduleJobTypes,
+        interval: s.interval,
+        startDate: s.startDate,
+        endDate: s.endDate,
+      })),
+      totalOccurrences: occurrences.length,
+      occurrencesByDateSize: occurrencesByDate.size,
+    });
+  }, [automations, occurrences, occurrencesByDate]);
 
   // Create a map of forecast data by date
   const forecastByDate = new Map<string, DailyForecast>();

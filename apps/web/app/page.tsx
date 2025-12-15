@@ -9,6 +9,7 @@ import { SoilMoistureChart } from '../components/SoilMoistureChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
 import { Forecast7Day } from '../components/Forecast7Day';
 import { ScheduleCalendar } from '../components/ScheduleCalendar';
+import { Modal } from '../components/Modal';
 import { RachioZone } from '../lib/api';
 
 export default function Dashboard() {
@@ -31,6 +32,16 @@ export default function Dashboard() {
     limit?: number | null;
     message?: string;
   } | null>(null);
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    type?: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info',
+  });
 
   // Simple auth prompt (Phase 1)
   useEffect(() => {
@@ -416,7 +427,11 @@ export default function Dashboard() {
                       // Refresh data after poll
                       await fetchData();
                       await checkRachioRateLimit();
-                      alert('Rachio data poll completed successfully');
+                      setModal({
+                        isOpen: true,
+                        message: 'Rachio data poll completed successfully',
+                        type: 'success',
+                      });
                     } catch (err: any) {
                       // Check if it's a rate limit error
                       if (err.response?.status === 429) {
@@ -428,9 +443,19 @@ export default function Dashboard() {
                           limit: rateLimitData.limit,
                           message: rateLimitData.message,
                         });
-                        alert(`Rate limit exceeded. ${rateLimitData.message || 'Please try again later.'}`);
+                        setModal({
+                          isOpen: true,
+                          title: 'Rate Limit Exceeded',
+                          message: rateLimitData.message || 'Please try again later.',
+                          type: 'error',
+                        });
                       } else {
-                        alert(`Failed to poll Rachio data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                        setModal({
+                          isOpen: true,
+                          title: 'Poll Failed',
+                          message: err instanceof Error ? err.message : 'Unknown error',
+                          type: 'error',
+                        });
                       }
                     } finally {
                       setPollingRachio(false);
@@ -512,6 +537,15 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Modal */}
+      <Modal
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+      />
     </div>
   );
 }
