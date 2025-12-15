@@ -188,4 +188,29 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * POST /api/sensors/sync
+ * Trigger a sync/refresh of available sensors by polling weather data
+ */
+router.post('/sync', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { pollWeatherData } = await import('../jobs/weatherPoll');
+    
+    // Trigger the weather poll which will sync sensors
+    await pollWeatherData();
+    
+    res.json({ 
+      success: true, 
+      message: 'Sensor sync completed successfully' 
+    });
+  } catch (error) {
+    console.error('Error syncing sensors:', error);
+    res.status(500).json({ 
+      error: 'Failed to sync sensors',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;
+

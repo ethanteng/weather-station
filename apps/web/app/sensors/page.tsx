@@ -11,6 +11,7 @@ export default function SensorsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [authToken, setAuthToken] = useState<string>('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken') || prompt('Enter admin password:');
@@ -73,6 +74,25 @@ export default function SensorsPage() {
     setEditingName('');
   };
 
+  const handleSync = async () => {
+    if (!authToken) return;
+
+    try {
+      setSyncing(true);
+      setError(null);
+      const { setAuthToken: setApiAuth } = await import('../../lib/api');
+      setApiAuth(authToken);
+
+      await sensorApi.sync();
+      // Refresh sensors after sync
+      await fetchSensors();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync sensors');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -95,6 +115,27 @@ export default function SensorsPage() {
               <p className="text-slate-600 text-base sm:text-lg">Manage and name your soil moisture sensors</p>
             </div>
             <div className="flex gap-3">
+              <button
+                onClick={handleSync}
+                disabled={syncing || !authToken}
+                className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-blue-600 border border-blue-600 rounded-lg shadow-sm hover:bg-blue-700 hover:border-blue-700 transition-all duration-200 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncing ? (
+                  <>
+                    <svg className="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Sync & Refresh
+                  </>
+                )}
+              </button>
               <Link
                 href="/"
                 className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 min-h-[44px]"
@@ -244,3 +285,4 @@ export default function SensorsPage() {
     </div>
   );
 }
+

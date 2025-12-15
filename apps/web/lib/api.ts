@@ -516,5 +516,10 @@ export const sensorApi = {
   async deleteSensor(id: string): Promise<void> {
     await api.delete(`/api/sensors/${id}`);
   },
+
+  async sync(): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/sensors/sync');
+    return response.data;
+  },
 };
 
