@@ -40,12 +40,13 @@ model RachioDevice {
 }
 
 model RachioZone {
-  id          String   @id
-  deviceId    String   @map("device_id")
-  name        String
-  enabled     Boolean
-  rawPayload  Json     @map("raw_payload")
-  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                 String   @id
+  deviceId           String   @map("device_id")
+  name               String
+  enabled            Boolean
+  cooldownPeriodDays Int?     @map("cooldown_period_days")
+  rawPayload         Json     @map("raw_payload")
+  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   device      RachioDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   events      WateringEvent[]
@@ -98,18 +99,5 @@ model AuditLog {
 
   @@index([timestamp])
   @@map("audit_logs")
-}
-
-model SoilMoistureSensor {
-  id        String   @id @default(cuid())
-  channel   Int      @unique // 1-16, corresponds to soil_ch1 through soil_ch16
-  name      String   // Custom name for the sensor
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  @@index([channel])
-  @@index([enabled])
-  @@map("soil_moisture_sensors")
 }
 

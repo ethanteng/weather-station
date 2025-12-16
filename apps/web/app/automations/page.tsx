@@ -443,7 +443,7 @@ function RuleView({
 }) {
   const [actionDisplay, setActionDisplay] = useState<{ icon: string; label: string; value: string } | null>(null);
   const [rachioScheduleDisplay, setRachioScheduleDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; duration: number; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null }>; totalDuration: number } | null>(null);
-  const [customRuleZonesDisplay, setCustomRuleZonesDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null }>; duration: number } | null>(null);
+  const [customRuleZonesDisplay, setCustomRuleZonesDisplay] = useState<{ zones: Array<{ zoneId: string; name: string; deviceName: string; imageUrl?: string | null; zoneNumber?: number | null; cooldownPeriodDays?: number | null }>; duration: number } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
@@ -651,6 +651,7 @@ function RuleView({
             const zoneNameMap = new Map<string, string>(); // zoneId -> zoneName
             const zoneImageMap = new Map<string, string | null>(); // zoneId -> imageUrl
             const zoneNumberMap = new Map<string, number | null>(); // zoneId -> zoneNumber
+            const zoneCooldownMap = new Map<string, number | null>(); // zoneId -> cooldownPeriodDays
             const allZones: RachioZone[] = [];
             
             // Build device map and collect zones
@@ -662,6 +663,7 @@ function RuleView({
                   zoneNameMap.set(zone.id, zone.name);
                   zoneImageMap.set(zone.id, zone.imageUrl || null);
                   zoneNumberMap.set(zone.id, zone.zoneNumber || null);
+                  zoneCooldownMap.set(zone.id, zone.cooldownPeriodDays ?? null);
                 });
               }
             }
@@ -684,6 +686,7 @@ function RuleView({
                   deviceName: zoneDeviceMap.get(zoneId) || 'Unknown Device',
                   imageUrl: zoneImageMap.get(zoneId) || null,
                   zoneNumber: zoneNumberMap.get(zoneId) || null,
+                  cooldownPeriodDays: zoneCooldownMap.get(zoneId) ?? null,
                 };
               });
               
@@ -1267,6 +1270,11 @@ function RuleView({
                           <div className="text-xs font-semibold text-slate-900 leading-tight">
                             {zone.deviceName} - {zone.name}
                           </div>
+                          {zone.cooldownPeriodDays !== null && zone.cooldownPeriodDays !== undefined && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              Cooldown: {zone.cooldownPeriodDays} day{zone.cooldownPeriodDays !== 1 ? 's' : ''}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1916,6 +1924,11 @@ function RuleEditor({
                               <span className="text-xs font-semibold text-slate-900 truncate flex-1">{zone.name}</span>
                             </div>
                             <div className="text-xs text-slate-500 truncate">{deviceName}</div>
+                            {zone.cooldownPeriodDays !== null && zone.cooldownPeriodDays !== undefined && (
+                              <div className="text-[10px] text-blue-600 mt-0.5">
+                                Cooldown: {zone.cooldownPeriodDays} day{zone.cooldownPeriodDays !== 1 ? 's' : ''}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

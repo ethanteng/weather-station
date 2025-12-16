@@ -93,6 +93,7 @@ export interface RachioZone {
   id: string;
   name: string;
   enabled: boolean;
+  cooldownPeriodDays?: number | null;
   zoneNumber?: number | null;
   imageUrl?: string | null;
   area?: number | null;
@@ -326,6 +327,10 @@ export const rachioApi = {
       message?: string;
     }>('/api/rachio/rate-limit-status');
     return response.data;
+  },
+
+  async updateZoneCooldown(zoneId: string, cooldownPeriodDays: number | null): Promise<void> {
+    await api.put(`/api/rachio/zones/${zoneId}/cooldown`, { cooldownPeriodDays });
   },
 };
 

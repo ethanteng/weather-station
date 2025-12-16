@@ -259,6 +259,57 @@ function evaluateConditions(
 }
 
 /**
+ * Check if a zone is currently in cooldown period
+ * Compares last watering date at day level (not hour/minute level)
+ * Returns true if zone is still in cooldown, false otherwise
+ */
+async function isZoneInCooldown(zoneId: string, cooldownDays: number): Promise<boolean> {
+  if (cooldownDays <= 0) {
+    return false; // No cooldown or invalid cooldown period
+  }
+
+  // Get the last watering event for this zone
+  const lastWatering = await prisma.wateringEvent.findFirst({
+    where: {
+      zoneId: zoneId,
+    },
+    orderBy: {
+      timestamp: 'desc',
+    },
+  });
+
+  // If no previous watering, zone is not in cooldown
+  if (!lastWatering) {
+    return false;
+  }
+
+  // Calculate days since last watering (day-level comparison)
+  // Use UTC methods since database timestamps are stored in UTC (Timestamptz)
+  const today = new Date();
+  const lastWateringDate = new Date(lastWatering.timestamp);
+  
+  // Set both dates to midnight UTC for day-level comparison
+  const todayMidnight = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate()
+  ));
+  const lastWateringMidnight = new Date(Date.UTC(
+    lastWateringDate.getUTCFullYear(),
+    lastWateringDate.getUTCMonth(),
+    lastWateringDate.getUTCDate()
+  ));
+
+  // Calculate difference in days
+  const daysSinceWatering = Math.floor(
+    (todayMidnight.getTime() - lastWateringMidnight.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  // Zone is in cooldown if days since watering is less than cooldown period
+  return daysSinceWatering < cooldownDays;
+}
+
+/**
  * Execute an action based on the rule's actions configuration
  */
 async function executeAction(
@@ -383,25 +434,24 @@ async function executeAction(
     const durationSec = actions.minutes * 60;
     const successfulZoneIds: string[] = [];
     const failedZoneIds: string[] = [];
+    const skippedZoneIds: string[] = [];
 
     // Run each zone
     for (const zoneId of zoneIds) {
-      // Safety check: Don't water if we've watered this zone in the last 24 hours
-      const lastWatering = await prisma.wateringEvent.findFirst({
-        where: {
-          zoneId: zoneId,
-          timestamp: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-          },
-        },
-        orderBy: {
-          timestamp: 'desc',
-        },
+      // Fetch zone's cooldown period from database
+      const zone = await prisma.rachioZone.findUnique({
+        where: { id: zoneId },
+        select: { cooldownPeriodDays: true, name: true },
       });
 
-      if (lastWatering) {
-        console.log(`Skipping watering: zone ${zoneId} was watered recently`);
-        continue;
+      // Check cooldown period if configured
+      if (zone && zone.cooldownPeriodDays !== null && zone.cooldownPeriodDays !== undefined && zone.cooldownPeriodDays > 0) {
+        const inCooldown = await isZoneInCooldown(zoneId, zone.cooldownPeriodDays);
+        if (inCooldown) {
+          console.log(`Skipping watering: zone ${zone.name || zoneId} is in cooldown period (${zone.cooldownPeriodDays} days)`);
+          skippedZoneIds.push(zoneId);
+          continue;
+        }
       }
 
       try {
@@ -412,8 +462,8 @@ async function executeAction(
           orderBy: { timestamp: 'desc' },
         });
 
-        // Get zone and device info for audit log
-        const zone = await prisma.rachioZone.findUnique({
+        // Get zone and device info for audit log (fetch again since we may have already fetched it above)
+        const zoneInfo = await prisma.rachioZone.findUnique({
           where: { id: zoneId },
           select: { name: true, device: { select: { id: true, name: true } } },
         });
@@ -437,9 +487,9 @@ async function executeAction(
             action: 'run_zone',
             details: {
               zoneId: zoneId,
-              zoneName: zone?.name || null,
-              deviceId: zone?.device?.id || null,
-              deviceName: zone?.device?.name || null,
+              zoneName: zoneInfo?.name || null,
+              deviceId: zoneInfo?.device?.id || null,
+              deviceName: zoneInfo?.device?.name || null,
               durationSec,
               minutes: Math.round(durationSec / 60),
               ruleId: ruleId || null,
@@ -484,6 +534,7 @@ async function executeAction(
         minutes: actions.minutes,
         zoneIds: successfulZoneIds,
         failedZoneIds,
+        skippedZoneIds,
         durationSec,
         soilMoisture: weather.soilMoisture,
         rain24h: weather.rain24h,

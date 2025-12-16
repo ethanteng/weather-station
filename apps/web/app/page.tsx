@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse } from '../lib/api';
+import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse, RachioZone } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
@@ -585,8 +585,59 @@ export default function Dashboard() {
   );
 }
 
-function ZoneCard({ zone }: { zone: RachioZone }) {
+function ZoneCard({ zone: initialZone }: { zone: RachioZone }) {
   const [expanded, setExpanded] = useState(false);
+  const [zone, setZone] = useState<RachioZone>(initialZone);
+  const [cooldownInput, setCooldownInput] = useState<string>(
+    initialZone.cooldownPeriodDays !== null && initialZone.cooldownPeriodDays !== undefined
+      ? initialZone.cooldownPeriodDays.toString()
+      : ''
+  );
+  const [savingCooldown, setSavingCooldown] = useState(false);
+  const [cooldownError, setCooldownError] = useState<string | null>(null);
+  const [cooldownSuccess, setCooldownSuccess] = useState(false);
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setZone(initialZone);
+    setCooldownInput(
+      initialZone.cooldownPeriodDays !== null && initialZone.cooldownPeriodDays !== undefined
+        ? initialZone.cooldownPeriodDays.toString()
+        : ''
+    );
+  }, [initialZone]);
+
+  const handleSaveCooldown = async () => {
+    setSavingCooldown(true);
+    setCooldownError(null);
+    setCooldownSuccess(false);
+
+    try {
+      // Parse input value
+      const value = cooldownInput.trim() === '' ? null : parseInt(cooldownInput, 10);
+      
+      // Validate
+      if (value !== null && (isNaN(value) || value < 0)) {
+        setCooldownError('Cooldown period must be a non-negative number');
+        setSavingCooldown(false);
+        return;
+      }
+
+      // Update via API
+      await rachioApi.updateZoneCooldown(zone.id, value);
+      
+      // Update local state
+      setZone({ ...zone, cooldownPeriodDays: value });
+      setCooldownSuccess(true);
+      
+      // Clear success message after 2 seconds
+      setTimeout(() => setCooldownSuccess(false), 2000);
+    } catch (error) {
+      setCooldownError(error instanceof Error ? error.message : 'Failed to update cooldown period');
+    } finally {
+      setSavingCooldown(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
@@ -672,6 +723,57 @@ function ZoneCard({ zone }: { zone: RachioZone }) {
                 <span className="font-medium text-slate-900">{zone.runtime} min</span>
               </div>
             )}
+            {/* Cooldown Period */}
+            <div className="mt-3 pt-3 border-t border-slate-200">
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Cooldown Period</div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={cooldownInput}
+                    onChange={(e) => {
+                      setCooldownInput(e.target.value);
+                      setCooldownError(null);
+                      setCooldownSuccess(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveCooldown();
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Days (leave empty for no cooldown)"
+                  />
+                  <button
+                    onClick={handleSaveCooldown}
+                    disabled={savingCooldown}
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {savingCooldown ? (
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      'Save'
+                    )}
+                  </button>
+                </div>
+                {cooldownError && (
+                  <div className="text-xs text-red-600">{cooldownError}</div>
+                )}
+                {cooldownSuccess && (
+                  <div className="text-xs text-green-600">Cooldown period updated successfully</div>
+                )}
+                <div className="text-xs text-slate-500">
+                  Current: {zone.cooldownPeriodDays !== null && zone.cooldownPeriodDays !== undefined
+                    ? `${zone.cooldownPeriodDays} day${zone.cooldownPeriodDays !== 1 ? 's' : ''}`
+                    : 'None'}
+                </div>
+              </div>
+            </div>
+
             {(zone.customNozzle || zone.customShade || zone.customSlope || zone.customCrop || zone.customSoil) && (
               <div className="mt-3 pt-3 border-t border-slate-200">
                 <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Custom Settings</div>

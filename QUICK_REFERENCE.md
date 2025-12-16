@@ -122,6 +122,89 @@ docker compose logs -f postgres
 docker compose logs postgres --tail 100
 ```
 
+## Database Migrations
+
+### Apply Migrations (Development)
+
+```bash
+# From project root - applies migrations and regenerates Prisma Client
+npm run db:migrate
+
+# Or from apps/api directory
+cd apps/api
+dotenv -e ../../.env -- prisma migrate dev
+```
+
+### Deploy Migrations (Production)
+
+```bash
+# From project root - applies pending migrations only (safe for production)
+npm run db:migrate:deploy --workspace=apps/api
+
+# Or from apps/api directory
+cd apps/api
+dotenv -e ../../.env -- prisma migrate deploy
+```
+
+**Important:** Use `migrate deploy` in production, not `migrate dev`. The `deploy` command:
+- Only applies pending migrations
+- Does not regenerate Prisma Client (assumes it's already built)
+- Safe for production deployments without downtime
+
+### Generate Prisma Client
+
+After applying migrations, regenerate Prisma Client to update TypeScript types:
+
+```bash
+# From project root
+npm run db:generate
+
+# Or from apps/api directory
+cd apps/api
+dotenv -e ../../.env -- prisma generate
+```
+
+### Check Migration Status
+
+```bash
+# View migration history
+cd apps/api
+dotenv -e ../../.env -- prisma migrate status
+```
+
+### Migration Workflow
+
+1. **Create migration** (already done via schema changes):
+   ```bash
+   cd apps/api
+   dotenv -e ../../.env -- prisma migrate dev --name migration_name
+   ```
+
+2. **Apply migration** (development):
+   ```bash
+   npm run db:migrate
+   ```
+
+3. **Deploy migration** (production):
+   ```bash
+   npm run db:migrate:deploy --workspace=apps/api
+   ```
+
+4. **Regenerate Prisma Client**:
+   ```bash
+   npm run db:generate
+   ```
+
+5. **Restart services** (if needed):
+   ```bash
+   sudo systemctl restart weather-station-api
+   ```
+
+### Migration Files Location
+
+- Migration files: `apps/api/prisma/migrations/`
+- Schema file: `apps/api/prisma/schema.prisma`
+
 ## Restart Everything
 
 ### Option 1: Manual Restart

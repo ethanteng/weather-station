@@ -54,6 +54,7 @@ router.get('/devices', async (_req: Request, res: Response) => {
           id: zone.id,
           name: zone.name,
           enabled: zone.enabled,
+          cooldownPeriodDays: zone.cooldownPeriodDays,
           zoneNumber: rawPayload?.zoneNumber || rawPayload?.zone || null,
           imageUrl,
           area: rawPayload?.area || null,
@@ -101,6 +102,54 @@ router.get('/zones', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching Rachio zones:', error);
     return res.status(500).json({ error: 'Failed to fetch zones' });
+  }
+});
+
+/**
+ * PUT /api/rachio/zones/:zoneId/cooldown
+ * Update cooldown period for a zone
+ * Body: { cooldownPeriodDays: number | null }
+ */
+router.put('/zones/:zoneId/cooldown', async (req: Request, res: Response) => {
+  try {
+    const { zoneId } = req.params;
+    const { cooldownPeriodDays } = req.body;
+
+    // Validate cooldownPeriodDays is null or a non-negative integer
+    if (cooldownPeriodDays !== null && cooldownPeriodDays !== undefined) {
+      if (typeof cooldownPeriodDays !== 'number' || cooldownPeriodDays < 0 || !Number.isInteger(cooldownPeriodDays)) {
+        return res.status(400).json({ error: 'cooldownPeriodDays must be null or a non-negative integer' });
+      }
+    }
+
+    // Check if zone exists
+    const zone = await prisma.rachioZone.findUnique({
+      where: { id: zoneId },
+    });
+
+    if (!zone) {
+      return res.status(404).json({ error: 'Zone not found' });
+    }
+
+    // Update zone cooldown period
+    const updatedZone = await prisma.rachioZone.update({
+      where: { id: zoneId },
+      data: {
+        cooldownPeriodDays: cooldownPeriodDays === null || cooldownPeriodDays === undefined ? null : cooldownPeriodDays,
+      },
+    });
+
+    return res.json({
+      success: true,
+      zone: {
+        id: updatedZone.id,
+        name: updatedZone.name,
+        cooldownPeriodDays: updatedZone.cooldownPeriodDays,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating zone cooldown period:', error);
+    return res.status(500).json({ error: 'Failed to update zone cooldown period' });
   }
 });
 
