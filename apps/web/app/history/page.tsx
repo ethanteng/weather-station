@@ -8,7 +8,7 @@ export default function HistoryPage() {
   const [entries, setEntries] = useState<AutomationHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'automation' | 'schedule'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'automation' | 'schedule' | 'upload'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [authToken, setAuthToken] = useState<string>('');
 
@@ -60,8 +60,16 @@ export default function HistoryPage() {
   const filteredEntries = Object.entries(groupedEntries).reduce((acc, [date, dateEntries]) => {
     const filtered = dateEntries.filter(entry => {
       // Type filter
-      if (filterType !== 'all' && entry.type !== filterType) {
-        return false;
+      if (filterType !== 'all') {
+        if (filterType === 'upload') {
+          // Filter for Weather Underground uploads
+          const isUpload = entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped';
+          if (!isUpload) {
+            return false;
+          }
+        } else if (entry.type !== filterType) {
+          return false;
+        }
       }
       // Search filter
       if (searchQuery) {
@@ -158,12 +166,13 @@ export default function HistoryPage() {
               <label className="block text-sm font-medium text-slate-700 mb-2">Type</label>
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as 'all' | 'automation' | 'schedule')}
+                onChange={(e) => setFilterType(e.target.value as 'all' | 'automation' | 'schedule' | 'upload')}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="all">All Types</option>
                 <option value="automation">Automations</option>
                 <option value="schedule">Schedules</option>
+                <option value="upload">Uploads</option>
               </select>
             </div>
           </div>
