@@ -84,8 +84,8 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
   const pressureLevel = isPressure ? getPressureLevel(value) : null;
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
-      <div className="p-4 sm:p-6">
+    <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow flex flex-col h-full">
+      <div className="p-4 sm:p-6 flex flex-col flex-grow">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wide">{label}</div>
           {icon && <span className="text-xl sm:text-2xl">{icon}</span>}
@@ -128,7 +128,7 @@ export function WeatherCard({ label, value, unit, icon, trendData }: WeatherCard
           </div>
         )}
         {hasTrendData && (
-          <div className="h-32 mt-4">
+          <div className="h-32 mt-auto">
             <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">7-Day Trend</div>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
