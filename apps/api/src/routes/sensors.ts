@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SoilMoistureSensor } from '@prisma/client';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -28,7 +28,7 @@ router.get('/', async (_req: Request, res: Response) => {
     });
 
     // Enrich sensors with current values
-    const sensorsWithValues = sensors.map(sensor => {
+    const sensorsWithValues = sensors.map((sensor: SoilMoistureSensor) => {
       const channelKey = `soil_ch${sensor.channel}`;
       const currentValue = latestReading?.soilMoistureValues 
         ? (latestReading.soilMoistureValues as Record<string, number>)[channelKey] 
