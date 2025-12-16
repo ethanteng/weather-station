@@ -33,6 +33,7 @@ export function RainfallChart({ data }: RainfallChartProps) {
             stroke="#64748b"
             fontSize={12}
             tickLine={false}
+            domain={[0, 1]}
             label={{ value: 'Inches', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: '12px' } }}
           />
           <Tooltip
