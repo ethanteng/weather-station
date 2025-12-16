@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
-import { SoilMoistureChart } from '../components/SoilMoistureChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
 import { Forecast7Day } from '../components/Forecast7Day';
 import { ScheduleCalendar } from '../components/ScheduleCalendar';
@@ -371,7 +370,7 @@ export default function Dashboard() {
             </div>
             <div className="p-4 sm:p-6 flex flex-col flex-grow">
               {sensors.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {sensors.map((sensor) => {
                     const channelKey = `soil_ch${sensor.channel}`;
                     const currentValue = latestWeather?.soilMoistureValues?.[channelKey] ?? sensor.currentValue;
@@ -423,11 +422,6 @@ export default function Dashboard() {
                   >
                     Go to Sensors page to configure
                   </Link>
-                </div>
-              )}
-              {sensors.length > 0 && weather24h && weather24h.readings.length > 0 && (
-                <div className="mt-auto">
-                  <SoilMoistureChart data={weather24h.readings} />
                 </div>
               )}
             </div>
