@@ -9,7 +9,6 @@ import { WateringEventsTable } from '../components/WateringEventsTable';
 import { Forecast7Day } from '../components/Forecast7Day';
 import { ScheduleCalendar } from '../components/ScheduleCalendar';
 import { Modal } from '../components/Modal';
-import { RachioZone } from '../lib/api';
 
 export default function Dashboard() {
   const [latestWeather, setLatestWeather] = useState<WeatherReading | null>(null);
