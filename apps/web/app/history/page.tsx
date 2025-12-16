@@ -59,12 +59,19 @@ export default function HistoryPage() {
   // Filter entries
   const filteredEntries = Object.entries(groupedEntries).reduce((acc, [date, dateEntries]) => {
     const filtered = dateEntries.filter(entry => {
+      // Check if entry is a Weather Underground upload
+      const isUpload = entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped';
+      
       // Type filter
       if (filterType !== 'all') {
         if (filterType === 'upload') {
-          // Filter for Weather Underground uploads
-          const isUpload = entry.action === 'wu_upload' || entry.action === 'wu_upload_failed' || entry.action === 'wu_upload_skipped';
+          // Filter for Weather Underground uploads only
           if (!isUpload) {
+            return false;
+          }
+        } else if (filterType === 'automation') {
+          // Filter for automations, but exclude uploads
+          if (entry.type !== 'automation' || isUpload) {
             return false;
           }
         } else if (entry.type !== filterType) {
