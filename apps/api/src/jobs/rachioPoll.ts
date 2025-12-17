@@ -261,8 +261,9 @@ export async function pollRachioData(): Promise<void> {
       }
 
       // Check for schedule watering events that don't have audit log entries yet
-      // Look for watering events with source='schedule' from the last 6 hours
-      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+      // Look for watering events with source='schedule' from the last 24 hours
+      // (increased from 6 hours to catch events that may have been stored but not yet processed)
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const recentScheduleEvents = await prisma.wateringEvent.findMany({
         where: {
           zone: {
@@ -270,7 +271,7 @@ export async function pollRachioData(): Promise<void> {
           },
           source: 'schedule',
           timestamp: {
-            gte: sixHoursAgo,
+            gte: twentyFourHoursAgo,
           },
         },
         include: {
@@ -281,7 +282,7 @@ export async function pollRachioData(): Promise<void> {
         },
       });
       
-      console.log(`  Found ${recentScheduleEvents.length} schedule watering events from last 6 hours for device ${device.id}`);
+      console.log(`  Found ${recentScheduleEvents.length} schedule watering events from last 24 hours for device ${device.id}`);
 
       // Get latest weather reading for weather stats
       const latestWeather = await prisma.weatherReading.findFirst({
@@ -297,7 +298,7 @@ export async function pollRachioData(): Promise<void> {
           action: 'rachio_schedule_ran',
           source: 'rachio_schedule',
           timestamp: {
-            gte: sixHoursAgo,
+            gte: twentyFourHoursAgo,
           },
         },
       });
@@ -311,11 +312,16 @@ export async function pollRachioData(): Promise<void> {
         }
       }
       
+      console.log(`  Processing ${recentScheduleEvents.length} schedule events, ${loggedEventIds.size} already logged`);
+      
       for (const event of recentScheduleEvents) {
         // Skip if already logged
         if (loggedEventIds.has(event.id)) {
+          console.log(`  Skipping event ${event.id} - already in audit log`);
           continue;
         }
+
+        console.log(`  Including event ${event.id} for zone ${event.zone.name} at ${event.timestamp.toISOString()}`);
 
         // Group events by 5-minute windows to identify schedule runs
         const timeWindow = Math.floor(event.timestamp.getTime() / (5 * 60 * 1000));
