@@ -37,7 +37,55 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
 
   // Calculate schedule occurrences
   const occurrences = calculateScheduleOccurrences(automations, today);
-  const occurrencesByDate = groupOccurrencesByDate(occurrences);
+  
+  // Recalculate isNextOccurrence based on current time - find the actual next occurrence that hasn't run yet
+  const now = new Date();
+  const updatedOccurrences = occurrences.map(occurrence => {
+    // Find the schedule to get startHour and startMinute
+    const schedule = automations.find(a => a.id === occurrence.scheduleId);
+    
+    // Check if this occurrence is in the past
+    const occurrenceDate = new Date(occurrence.date + 'T00:00:00');
+    const isPastDate = occurrenceDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // If it's today, check if the scheduled time has passed
+    let isPastTime = false;
+    if (!isPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
+      const scheduledTime = new Date(occurrenceDate);
+      scheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
+      isPastTime = scheduledTime < now;
+    }
+    
+    const isPast = isPastDate || isPastTime;
+    
+    // Find the first occurrence that isn't in the past for this schedule
+    const scheduleOccurrences = occurrences.filter(o => o.scheduleId === occurrence.scheduleId);
+    const nextFutureOccurrence = scheduleOccurrences.find(o => {
+      const oDate = new Date(o.date + 'T00:00:00');
+      const oIsPastDate = oDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      let oIsPastTime = false;
+      if (!oIsPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
+        const oScheduledTime = new Date(oDate);
+        oScheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
+        oIsPastTime = oScheduledTime < now;
+      }
+      
+      return !oIsPastDate && !oIsPastTime;
+    });
+    
+    // This occurrence is the next one if it's the first future occurrence for this schedule
+    const isActuallyNext = nextFutureOccurrence && 
+                          nextFutureOccurrence.date === occurrence.date &&
+                          nextFutureOccurrence.scheduleId === occurrence.scheduleId;
+    
+    return {
+      ...occurrence,
+      isNextOccurrence: isActuallyNext || false,
+    };
+  });
+  
+  const occurrencesByDate = groupOccurrencesByDate(updatedOccurrences);
 
   // Fetch zone data with images for schedules
   useEffect(() => {
