@@ -388,7 +388,10 @@ export class RachioClient {
     try {
       const duration = hours * 3600; // Convert hours to seconds
       
-      await this.client.put(`/device/${deviceId}/rain_delay`, {
+      // According to Rachio API docs: endpoint is /device/rain_delay (not /device/{id}/rain_delay)
+      // Device ID and duration must be in request body
+      await this.client.put(`/device/rain_delay`, {
+        id: deviceId,
         duration,
       });
 
