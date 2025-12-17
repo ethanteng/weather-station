@@ -634,10 +634,31 @@ function RuleView({
 
       // Handle custom rules
       if (rule.actions.type === 'set_rain_delay') {
+        let deviceInfo = '';
+        if (rule.actions.deviceIds && rule.actions.deviceIds.length > 0) {
+          try {
+            // Fetch device names
+            const devices = await rachioApi.getDevices();
+            const selectedDevices = devices.filter(device => rule.actions.deviceIds?.includes(device.id));
+            if (selectedDevices.length > 0) {
+              const deviceNames = selectedDevices.map(d => d.name);
+              deviceInfo = ` - ${deviceNames.join(', ')}`;
+            } else {
+              deviceInfo = ` - ${rule.actions.deviceIds.length} device(s)`;
+            }
+          } catch (error) {
+            console.error('Error loading device names for rain delay:', error);
+            deviceInfo = rule.actions.deviceIds.length > 0 ? ` - ${rule.actions.deviceIds.length} device(s)` : '';
+          }
+        } else {
+          // No deviceIds means it applies to all devices
+          deviceInfo = ' - All devices';
+        }
+        
         setActionDisplay({
           icon: '',
           label: 'Set Rain Delay',
-          value: `${rule.actions.hours} hours`,
+          value: `${rule.actions.hours} hours${deviceInfo}`,
         });
         return;
       }
@@ -1901,48 +1922,44 @@ function RuleEditor({
                     No devices found. Make sure your Rachio devices are synced.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {devices.map((device) => {
                       const isSelected = (actions.deviceIds || []).includes(device.id);
                       return (
                         <div
                           key={device.id}
                           onClick={() => handleDeviceToggle(device.id)}
-                          className={`relative bg-white rounded-lg border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+                          className={`relative bg-white rounded-lg border-2 overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
                             isSelected
-                              ? 'border-blue-500 shadow-md ring-2 ring-blue-200'
+                              ? 'border-blue-500 shadow-sm ring-1 ring-blue-200'
                               : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
                           {/* Selection Indicator */}
                           {isSelected && (
-                            <div className="absolute top-2 right-2 z-10">
-                              <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
-                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="absolute top-1 right-1 z-10">
+                              <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                 </svg>
                               </div>
                             </div>
                           )}
                           
-                          {/* Device Icon */}
-                          <div className="aspect-square bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
-                            <svg className="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                            </svg>
-                          </div>
-                          
-                          {/* Device Info */}
-                          <div className="p-3">
-                            <div className="text-sm font-semibold text-slate-900 truncate">{device.name}</div>
-                            <div className="text-xs text-slate-500 mt-1">
-                              Status: <span className={`font-medium ${device.status === 'ONLINE' ? 'text-green-600' : 'text-slate-600'}`}>{device.status}</span>
+                          {/* Device Info - Compact */}
+                          <div className="p-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                              </svg>
+                              <div className="text-xs font-semibold text-slate-900 truncate flex-1">{device.name}</div>
                             </div>
-                            {device.zones && device.zones.length > 0 && (
-                              <div className="text-xs text-slate-500 mt-1">
-                                {device.zones.length} zone{device.zones.length !== 1 ? 's' : ''}
-                              </div>
-                            )}
+                            <div className="text-[10px] text-slate-500">
+                              <span className={`font-medium ${device.status === 'ONLINE' ? 'text-green-600' : 'text-slate-600'}`}>{device.status}</span>
+                              {device.zones && device.zones.length > 0 && (
+                                <span className="ml-1.5">• {device.zones.length} zone{device.zones.length !== 1 ? 's' : ''}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
