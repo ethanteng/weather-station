@@ -112,6 +112,9 @@ export interface WateringEvent {
   id: string;
   timestamp: string;
   zoneId: string;
+  zoneName?: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
   durationSec: number;
   source: 'manual' | 'schedule' | 'automation';
 }

@@ -351,6 +351,12 @@ router.get('/watering-events', async (_req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
+            device: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -361,6 +367,8 @@ router.get('/watering-events', async (_req: Request, res: Response) => {
       timestamp: event.timestamp,
       zoneId: event.zoneId,
       zoneName: event.zone.name,
+      deviceId: event.zone.device?.id || null,
+      deviceName: event.zone.device?.name || null,
       durationSec: event.durationSec,
       source: event.source,
     })));

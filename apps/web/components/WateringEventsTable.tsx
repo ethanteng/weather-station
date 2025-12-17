@@ -4,13 +4,16 @@ interface WateringEvent {
   id: string;
   timestamp: string;
   zoneId: string;
+  zoneName?: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
   durationSec: number;
   source: 'manual' | 'schedule' | 'automation';
 }
 
 interface WateringEventsTableProps {
   events: WateringEvent[];
-  zones: Record<string, string>; // zoneId -> zoneName mapping
+  zones: Record<string, string>; // zoneId -> zoneName mapping (for fallback)
 }
 
 export function WateringEventsTable({ events, zones }: WateringEventsTableProps) {
@@ -57,49 +60,63 @@ export function WateringEventsTable({ events, zones }: WateringEventsTableProps)
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {events.map((event) => (
-              <tr key={event.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                  {new Date(event.timestamp).toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                  {zones[event.zoneId] || event.zoneId}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
-                  {Math.round(event.durationSec / 60)} min
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                  {getSourceLabel(event.source)}
-                </td>
-              </tr>
-            ))}
+            {events.map((event) => {
+              const zoneName = event.zoneName || zones[event.zoneId] || event.zoneId;
+              const displayZone = event.deviceName 
+                ? `${zoneName} (${event.deviceName})`
+                : zoneName;
+              
+              return (
+                <tr key={event.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                    {new Date(event.timestamp).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                    {displayZone}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900">
+                    {Math.round(event.durationSec / 60)} min
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                    {getSourceLabel(event.source)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       {/* Mobile Card View */}
       <div className="md:hidden divide-y divide-slate-200">
-        {events.map((event) => (
-          <div key={event.id} className="p-4">
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex-1">
-                <div className="text-sm font-semibold text-slate-900 mb-1">
-                  {zones[event.zoneId] || event.zoneId}
+        {events.map((event) => {
+          const zoneName = event.zoneName || zones[event.zoneId] || event.zoneId;
+          const displayZone = event.deviceName 
+            ? `${zoneName} (${event.deviceName})`
+            : zoneName;
+          
+          return (
+            <div key={event.id} className="p-4">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-slate-900 mb-1">
+                    {displayZone}
+                  </div>
+                  <div className="text-xs text-slate-600">
+                    {new Date(event.timestamp).toLocaleString()}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-600">
-                  {new Date(event.timestamp).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-slate-900">
-                  {Math.round(event.durationSec / 60)} min
-                </div>
-                <div className="text-xs text-slate-600 mt-1">
-                  {getSourceLabel(event.source)}
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-slate-900">
+                    {Math.round(event.durationSec / 60)} min
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1">
+                    {getSourceLabel(event.source)}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
