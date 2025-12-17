@@ -28,6 +28,7 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
 
   // Generate array of 30 days starting from today
   const today = new Date();
+  const now = new Date(); // Current time for comparing scheduled times
   const days: Date[] = [];
   for (let i = 0; i < 30; i++) {
     const date = new Date(today);
@@ -39,45 +40,44 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
   const occurrences = calculateScheduleOccurrences(automations, today);
   
   // Recalculate isNextOccurrence based on current time - find the actual next occurrence that hasn't run yet
-  const now = new Date();
-  const updatedOccurrences = occurrences.map(occurrence => {
-    // Find the schedule to get startHour and startMinute
-    const schedule = automations.find(a => a.id === occurrence.scheduleId);
-    
-    // Check if this occurrence is in the past
-    const occurrenceDate = new Date(occurrence.date + 'T00:00:00');
-    const isPastDate = occurrenceDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  // Helper function to check if an occurrence is in the past
+  const isOccurrencePast = (occ: ScheduleOccurrence): boolean => {
+    const schedule = automations.find(a => a.id === occ.scheduleId);
+    const [year, month, day] = occ.date.split('-').map(Number);
+    const occurrenceDate = new Date(year, month - 1, day);
+    const isPastDate = occurrenceDate < todayStart;
     
     // If it's today, check if the scheduled time has passed
-    let isPastTime = false;
-    if (!isPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
-      const scheduledTime = new Date(occurrenceDate);
-      scheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
-      isPastTime = scheduledTime < now;
+    if (!isPastDate && schedule && schedule.startHour !== undefined && schedule.startMinute !== undefined) {
+      const scheduledTime = new Date(year, month - 1, day, schedule.startHour, schedule.startMinute, 0, 0);
+      return scheduledTime < now;
     }
     
-    const isPast = isPastDate || isPastTime;
-    
-    // Find the first occurrence that isn't in the past for this schedule
-    const scheduleOccurrences = occurrences.filter(o => o.scheduleId === occurrence.scheduleId);
-    const nextFutureOccurrence = scheduleOccurrences.find(o => {
-      const oDate = new Date(o.date + 'T00:00:00');
-      const oIsPastDate = oDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      let oIsPastTime = false;
-      if (!oIsPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
-        const oScheduledTime = new Date(oDate);
-        oScheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
-        oIsPastTime = oScheduledTime < now;
-      }
-      
-      return !oIsPastDate && !oIsPastTime;
-    });
-    
-    // This occurrence is the next one if it's the first future occurrence for this schedule
-    const isActuallyNext = nextFutureOccurrence && 
-                          nextFutureOccurrence.date === occurrence.date &&
-                          nextFutureOccurrence.scheduleId === occurrence.scheduleId;
+    return isPastDate;
+  };
+  
+  // Group occurrences by schedule and find the next future occurrence for each
+  const scheduleGroups = new Map<string, ScheduleOccurrence[]>();
+  occurrences.forEach(occ => {
+    if (!scheduleGroups.has(occ.scheduleId)) {
+      scheduleGroups.set(occ.scheduleId, []);
+    }
+    scheduleGroups.get(occ.scheduleId)!.push(occ);
+  });
+  
+  // Find the next future occurrence for each schedule
+  const nextOccurrenceBySchedule = new Map<string, ScheduleOccurrence | null>();
+  scheduleGroups.forEach((scheduleOccs, scheduleId) => {
+    const nextOcc = scheduleOccs.find(occ => !isOccurrencePast(occ));
+    nextOccurrenceBySchedule.set(scheduleId, nextOcc || null);
+  });
+  
+  // Update occurrences with correct isNextOccurrence flag
+  const updatedOccurrences = occurrences.map(occurrence => {
+    const nextOcc = nextOccurrenceBySchedule.get(occurrence.scheduleId);
+    const isActuallyNext = nextOcc && nextOcc.date === occurrence.date && nextOcc.scheduleId === occurrence.scheduleId;
     
     return {
       ...occurrence,
@@ -347,20 +347,21 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
                           // Find the schedule to get startHour and startMinute
                           const schedule = automations.find(a => a.id === occurrence.scheduleId);
                           
-                          // Check if this scheduled run is in the past
-                          const occurrenceDate = new Date(occurrence.date + 'T00:00:00');
-                          const now = new Date();
-                          const isPastDate = occurrenceDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          // Check if this scheduled run is in the past (using local time)
+                          const [year, month, day] = occurrence.date.split('-').map(Number);
+                          const occurrenceDate = new Date(year, month - 1, day);
+                          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const isPastDate = occurrenceDate < todayStart;
                           
                           // If it's today, check if the scheduled time has passed
                           let isPastTime = false;
                           if (!isPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
-                            const scheduledTime = new Date(occurrenceDate);
-                            scheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
+                            const scheduledTime = new Date(year, month - 1, day, schedule.startHour, schedule.startMinute, 0, 0);
                             isPastTime = scheduledTime < now;
                           }
                           
                           const isPast = isPastDate || isPastTime;
+                          // Show Skip button if this is the next occurrence and it hasn't passed yet
                           const canSkip = occurrence.isNextOccurrence && !isPast;
                           
                           return (
