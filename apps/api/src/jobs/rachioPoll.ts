@@ -119,17 +119,30 @@ export async function pollRachioData(): Promise<void> {
           }
           
           // Check if this is a schedule zone completion event
-          // According to Rachio docs: category "SCHEDULE" and type "ZONE_STATUS" indicates zone completed within schedule
-          // Also check SCHEDULE_STATUS events which may contain zone completion info
-          const isScheduleZoneEvent = event.category === 'SCHEDULE' && 
-                                      (event.type === 'ZONE_STATUS' || event.type === 'SCHEDULE_STATUS') &&
-                                      event.summary?.toLowerCase().includes('completed');
+          // Events can be:
+          // 1. SCHEDULE_STATUS with subType "SCHEDULE_COMPLETED" and summary like "Zone 1 ran for X minutes"
+          // 2. ZONE_STATUS with summary "Zone X completed watering..." (category may be undefined)
+          // 3. SCHEDULE category with ZONE_STATUS type and "completed" in summary
+          const summaryLower = event.summary?.toLowerCase() || '';
+          const isCompleted = summaryLower.includes('completed') || 
+                             summaryLower.includes('ran for') ||
+                             event.subType === 'SCHEDULE_COMPLETED';
+          
+          const isScheduleZoneEvent = isCompleted && (
+            // SCHEDULE_STATUS with SCHEDULE_COMPLETED subType
+            (event.category === 'SCHEDULE' && event.type === 'SCHEDULE_STATUS' && event.subType === 'SCHEDULE_COMPLETED') ||
+            // ZONE_STATUS events (category may be undefined for schedule zone completions)
+            (event.type === 'ZONE_STATUS' && summaryLower.includes('completed')) ||
+            // SCHEDULE category with ZONE_STATUS type
+            (event.category === 'SCHEDULE' && event.type === 'ZONE_STATUS' && summaryLower.includes('completed'))
+          );
           
           if (!isScheduleZoneEvent || !event.summary) {
             console.log(`  Skipping event - not a schedule zone completion:`, {
               id: event.id,
               category: event.category,
               type: event.type,
+              subType: event.subType,
               summary: event.summary?.substring(0, 100)
             });
             continue; // Skip non-schedule zone events
@@ -139,35 +152,28 @@ export async function pollRachioData(): Promise<void> {
             id: event.id,
             category: event.category,
             type: event.type,
+            subType: event.subType,
             summary: event.summary
           });
           
           // Parse zone name from summary
-          // Examples from Rachio docs:
-          // - "Zone 1 ya completed with a duration of 6 minutes"
-          // - "Every 3 Days at 5:00 AM with a duration of 6 minutes completed" (SCHEDULE_STATUS - no zone name)
+          // Examples from actual events:
+          // - "Zone 1 ran for 24 minutes." (SCHEDULE_STATUS)
+          // - "Zone 1 completed watering at 04:23 AM (PST) for 24 minutes." (ZONE_STATUS)
+          // - "Zone 1 ya completed with a duration of 6 minutes" (from docs)
           const summary = event.summary.toLowerCase();
           let zoneName: string | null = null;
           
-          // For ZONE_STATUS events, parse zone name from summary
-          if (event.type === 'ZONE_STATUS') {
-            // Pattern 1: "Zone 1", "Zone 2", etc. (with optional "ya" before "completed")
-            const zoneNumberMatch = summary.match(/zone\s*(\d+)/);
-            if (zoneNumberMatch) {
-              zoneName = `zone ${zoneNumberMatch[1]}`.toLowerCase();
-            } else {
-              // Pattern 2: Zone name appears before "completed" (e.g., "Zone Frontyard completed")
-              // Match "Zone" followed by text until "completed" or "ya completed"
-              const zoneNameMatch = summary.match(/zone\s+([^ya\s]+?)\s+(?:ya\s+)?completed/i);
-              if (zoneNameMatch) {
-                zoneName = zoneNameMatch[1].trim().toLowerCase();
-              }
+          // Pattern 1: "Zone 1", "Zone 2", etc. - most common pattern
+          const zoneNumberMatch = summary.match(/zone\s*(\d+)/);
+          if (zoneNumberMatch) {
+            zoneName = `zone ${zoneNumberMatch[1]}`.toLowerCase();
+          } else {
+            // Pattern 2: Zone name appears before "completed" or "ran for" (e.g., "Zone Frontyard completed")
+            const zoneNameMatch = summary.match(/zone\s+([^ya\s]+?)\s+(?:ya\s+)?(?:completed|ran\s+for)/i);
+            if (zoneNameMatch) {
+              zoneName = zoneNameMatch[1].trim().toLowerCase();
             }
-          } else if (event.type === 'SCHEDULE_STATUS') {
-            // SCHEDULE_STATUS events don't have zone names in the summary
-            // We'd need to match zones from the schedule, but for now skip these
-            console.log(`  Skipping SCHEDULE_STATUS event (no zone info): ${event.summary}`);
-            continue;
           }
           
           if (!zoneName) {
@@ -182,16 +188,29 @@ export async function pollRachioData(): Promise<void> {
             continue;
           }
           
-          // Parse duration from summary (e.g., "with a duration of 6 minutes")
-          // Duration can be in minutes or seconds
+          // Parse duration from summary
+          // Examples:
+          // - "ran for 24 minutes"
+          // - "completed watering ... for 24 minutes"
+          // - "with a duration of 6 minutes" (from docs)
           let durationSec: number | null = null;
-          const durationMinutesMatch = summary.match(/duration\s+of\s+(\d+)\s+minute/i);
-          const durationSecondsMatch = summary.match(/duration\s+of\s+(\d+)\s+second/i);
           
-          if (durationMinutesMatch) {
-            durationSec = parseInt(durationMinutesMatch[1], 10) * 60;
-          } else if (durationSecondsMatch) {
-            durationSec = parseInt(durationSecondsMatch[1], 10);
+          // Pattern 1: "ran for X minutes" or "for X minutes"
+          const ranForMatch = summary.match(/(?:ran\s+for|for)\s+(\d+)\s+minute/i);
+          if (ranForMatch) {
+            durationSec = parseInt(ranForMatch[1], 10) * 60;
+          } else {
+            // Pattern 2: "with a duration of X minutes"
+            const durationMinutesMatch = summary.match(/duration\s+of\s+(\d+)\s+minute/i);
+            if (durationMinutesMatch) {
+              durationSec = parseInt(durationMinutesMatch[1], 10) * 60;
+            } else {
+              // Pattern 3: "with a duration of X seconds"
+              const durationSecondsMatch = summary.match(/duration\s+of\s+(\d+)\s+second/i);
+              if (durationSecondsMatch) {
+                durationSec = parseInt(durationSecondsMatch[1], 10);
+              }
+            }
           }
           
           if (!durationSec || durationSec <= 0) {
