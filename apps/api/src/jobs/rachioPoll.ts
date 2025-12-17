@@ -98,44 +98,76 @@ export async function pollRachioData(): Promise<void> {
         const deviceEvents = await client.getDeviceEvents(device.id, twentyFourHoursAgo, now);
         console.log(`  Fetched ${deviceEvents.length} device events for device ${device.id}`);
         
+        // Debug: Log all events to see their structure
+        if (deviceEvents.length > 0) {
+          console.log(`  Sample event structure:`, JSON.stringify(deviceEvents[0], null, 2));
+        }
+        
         // Process events to find schedule watering events
         // Look for events with category "SCHEDULE" and type "ZONE_STATUS" (zone completed within schedule)
         for (const event of deviceEvents) {
           // Parse event timestamp - eventDate is in milliseconds
           if (!event.eventDate || typeof event.eventDate !== 'number') {
+            console.log(`  Skipping event - no valid eventDate:`, event.id, event.category, event.type);
             continue; // Skip events without valid timestamps
           }
           
           const eventTimestamp = new Date(event.eventDate);
           if (isNaN(eventTimestamp.getTime())) {
+            console.log(`  Skipping event - invalid timestamp:`, event.id, event.eventDate);
             continue; // Skip invalid timestamps
           }
           
           // Check if this is a schedule zone completion event
           // According to Rachio docs: category "SCHEDULE" and type "ZONE_STATUS" indicates zone completed within schedule
+          // Also check SCHEDULE_STATUS events which may contain zone completion info
           const isScheduleZoneEvent = event.category === 'SCHEDULE' && 
-                                      event.type === 'ZONE_STATUS' &&
+                                      (event.type === 'ZONE_STATUS' || event.type === 'SCHEDULE_STATUS') &&
                                       event.summary?.toLowerCase().includes('completed');
           
           if (!isScheduleZoneEvent || !event.summary) {
+            console.log(`  Skipping event - not a schedule zone completion:`, {
+              id: event.id,
+              category: event.category,
+              type: event.type,
+              summary: event.summary?.substring(0, 100)
+            });
             continue; // Skip non-schedule zone events
           }
           
-          // Parse zone name from summary (e.g., "Zone 1 ya completed" or "Zone Frontyard completed")
+          console.log(`  Processing schedule event:`, {
+            id: event.id,
+            category: event.category,
+            type: event.type,
+            summary: event.summary
+          });
+          
+          // Parse zone name from summary
+          // Examples from Rachio docs:
+          // - "Zone 1 ya completed with a duration of 6 minutes"
+          // - "Every 3 Days at 5:00 AM with a duration of 6 minutes completed" (SCHEDULE_STATUS - no zone name)
           const summary = event.summary.toLowerCase();
           let zoneName: string | null = null;
           
-          // Try to match zone name patterns
-          // Pattern 1: "Zone 1", "Zone 2", etc.
-          const zoneNumberMatch = summary.match(/zone\s*(\d+)/);
-          if (zoneNumberMatch) {
-            zoneName = `zone ${zoneNumberMatch[1]}`.toLowerCase();
-          } else {
-            // Pattern 2: Zone name appears before "completed" (e.g., "Zone Frontyard completed")
-            const zoneNameMatch = summary.match(/zone\s+([^ya\s]+)\s+(?:ya\s+)?completed/i);
-            if (zoneNameMatch) {
-              zoneName = zoneNameMatch[1].trim().toLowerCase();
+          // For ZONE_STATUS events, parse zone name from summary
+          if (event.type === 'ZONE_STATUS') {
+            // Pattern 1: "Zone 1", "Zone 2", etc. (with optional "ya" before "completed")
+            const zoneNumberMatch = summary.match(/zone\s*(\d+)/);
+            if (zoneNumberMatch) {
+              zoneName = `zone ${zoneNumberMatch[1]}`.toLowerCase();
+            } else {
+              // Pattern 2: Zone name appears before "completed" (e.g., "Zone Frontyard completed")
+              // Match "Zone" followed by text until "completed" or "ya completed"
+              const zoneNameMatch = summary.match(/zone\s+([^ya\s]+?)\s+(?:ya\s+)?completed/i);
+              if (zoneNameMatch) {
+                zoneName = zoneNameMatch[1].trim().toLowerCase();
+              }
             }
+          } else if (event.type === 'SCHEDULE_STATUS') {
+            // SCHEDULE_STATUS events don't have zone names in the summary
+            // We'd need to match zones from the schedule, but for now skip these
+            console.log(`  Skipping SCHEDULE_STATUS event (no zone info): ${event.summary}`);
+            continue;
           }
           
           if (!zoneName) {
@@ -195,7 +227,9 @@ export async function pollRachioData(): Promise<void> {
                 rawPayload: event,
               },
             });
-            console.log(`  Stored schedule watering event for zone ${zoneName} (${zoneId}), duration ${durationSec}s at ${eventTimestamp.toISOString()}`);
+            console.log(`  ✓ Stored schedule watering event for zone ${zoneName} (${zoneId}), duration ${durationSec}s at ${eventTimestamp.toISOString()}`);
+          } else {
+            console.log(`  Skipping duplicate event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
           }
         }
       } catch (error: any) {
@@ -227,6 +261,8 @@ export async function pollRachioData(): Promise<void> {
           timestamp: 'desc',
         },
       });
+      
+      console.log(`  Found ${recentScheduleEvents.length} schedule watering events from last 6 hours for device ${device.id}`);
 
       // Get latest weather reading for weather stats
       const latestWeather = await prisma.weatherReading.findFirst({
@@ -273,8 +309,11 @@ export async function pollRachioData(): Promise<void> {
       }
 
       // Create audit log entries for schedule runs
+      console.log(`  Grouped into ${scheduleRuns.size} schedule run(s)`);
       for (const [, events] of scheduleRuns.entries()) {
         if (events.length === 0) continue;
+        
+        console.log(`  Processing schedule run with ${events.length} zone event(s)`);
 
         // Try to identify which schedule ran by matching zones
         // Get all schedules for this device
