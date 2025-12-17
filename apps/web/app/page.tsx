@@ -355,7 +355,38 @@ export default function Dashboard() {
         )}
 
         {/* Current Running Schedules */}
-        {devices.length > 0 && Object.values(currentSchedules).some(s => s !== null) && (
+        {(() => {
+          // Helper function to validate if a schedule is actually valid and running
+          const isValidRunningSchedule = (schedule: typeof currentSchedules[string]): boolean => {
+            if (!schedule) return false;
+            // Check if startDate is valid and is a number
+            if (!schedule.startDate || typeof schedule.startDate !== 'number' || isNaN(schedule.startDate)) {
+              return false;
+            }
+            // Check if duration is valid and is a number
+            if (!schedule.duration || typeof schedule.duration !== 'number' || isNaN(schedule.duration)) {
+              return false;
+            }
+            // Check if the date is valid (not Invalid Date)
+            const startTime = new Date(schedule.startDate);
+            if (isNaN(startTime.getTime())) {
+              return false;
+            }
+            // Check if status indicates it's running
+            if (schedule.status !== 'PROCESSING') {
+              return false;
+            }
+            return true;
+          };
+
+          // Filter to only valid running schedules
+          const validSchedules = devices.filter(device => {
+            const schedule = currentSchedules[device.id];
+            return isValidRunningSchedule(schedule);
+          });
+
+          return validSchedules.length > 0;
+        })() && (
           <div className="mb-6">
             <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-6 py-4 border-b border-slate-200">
@@ -368,11 +399,28 @@ export default function Dashboard() {
                     const zone = device.zones.find(z => z.id === currentSchedule?.zoneId);
                     const isStopping = stoppingDevices.has(device.id);
                     
+                    // Validate schedule before displaying - use same validation logic
                     if (!currentSchedule) {
                       return null;
                     }
+                    // Check if startDate is valid
+                    if (!currentSchedule.startDate || typeof currentSchedule.startDate !== 'number' || isNaN(currentSchedule.startDate)) {
+                      return null;
+                    }
+                    // Check if duration is valid
+                    if (!currentSchedule.duration || typeof currentSchedule.duration !== 'number' || isNaN(currentSchedule.duration)) {
+                      return null;
+                    }
+                    // Check if the date is valid (not Invalid Date)
+                    const startTime = new Date(currentSchedule.startDate);
+                    if (isNaN(startTime.getTime())) {
+                      return null;
+                    }
+                    // Only show if status is PROCESSING
+                    if (currentSchedule.status !== 'PROCESSING') {
+                      return null;
+                    }
 
-                      const startTime = new Date(currentSchedule.startDate);
                       const elapsedSeconds = Math.floor((Date.now() - currentSchedule.startDate) / 1000);
                       const remainingSeconds = Math.max(0, currentSchedule.duration - elapsedSeconds);
                       const remainingMinutes = Math.floor(remainingSeconds / 60);
