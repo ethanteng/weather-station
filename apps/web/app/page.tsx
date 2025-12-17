@@ -134,8 +134,8 @@ export default function Dashboard() {
     if (authToken) {
       fetchData();
       checkRachioRateLimit();
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchData, 30000);
+      // Refresh every 30 minutes (reduced from 30 seconds to reduce Rachio API calls)
+      const interval = setInterval(fetchData, 30 * 60 * 1000);
       // Check rate limit status every minute
       const rateLimitInterval = setInterval(checkRachioRateLimit, 60000);
       return () => {
