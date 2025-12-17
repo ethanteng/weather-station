@@ -333,6 +333,14 @@ export const rachioApi = {
   async updateZoneCooldown(zoneId: string, cooldownPeriodDays: number | null): Promise<void> {
     await api.put(`/api/rachio/zones/${zoneId}/cooldown`, { cooldownPeriodDays });
   },
+
+  async startZone(zoneId: string, minutes: number): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/rachio/zone/run', {
+      zoneId,
+      minutes,
+    });
+    return response.data;
+  },
 };
 
 type ScheduleZone = {

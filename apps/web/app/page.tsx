@@ -595,6 +595,10 @@ function ZoneCard({ zone: initialZone }: { zone: RachioZone }) {
   const [savingCooldown, setSavingCooldown] = useState(false);
   const [cooldownError, setCooldownError] = useState<string | null>(null);
   const [cooldownSuccess, setCooldownSuccess] = useState(false);
+  const [durationInput, setDurationInput] = useState<string>('');
+  const [startingZone, setStartingZone] = useState(false);
+  const [zoneStartError, setZoneStartError] = useState<string | null>(null);
+  const [zoneStartSuccess, setZoneStartSuccess] = useState(false);
 
   // Update local state when prop changes
   useEffect(() => {
@@ -635,6 +639,48 @@ function ZoneCard({ zone: initialZone }: { zone: RachioZone }) {
       setCooldownError(error instanceof Error ? error.message : 'Failed to update cooldown period');
     } finally {
       setSavingCooldown(false);
+    }
+  };
+
+  const handleStartZone = async () => {
+    setStartingZone(true);
+    setZoneStartError(null);
+    setZoneStartSuccess(false);
+
+    try {
+      // Parse and validate duration
+      const duration = parseFloat(durationInput.trim());
+      
+      if (isNaN(duration) || duration <= 0) {
+        setZoneStartError('Duration must be a positive number');
+        setStartingZone(false);
+        return;
+      }
+
+      if (duration > 180) {
+        setZoneStartError('Duration cannot exceed 180 minutes (3 hours)');
+        setStartingZone(false);
+        return;
+      }
+
+      // Start zone via API
+      await rachioApi.startZone(zone.id, duration);
+      
+      setZoneStartSuccess(true);
+      setDurationInput(''); // Clear input on success
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setZoneStartSuccess(false), 3000);
+    } catch (error: any) {
+      // Handle rate limit errors
+      if (error.response?.status === 429) {
+        const rateLimitData = error.response.data;
+        setZoneStartError(rateLimitData.message || 'Rate limit exceeded. Please try again later.');
+      } else {
+        setZoneStartError(error instanceof Error ? error.message : 'Failed to start zone');
+      }
+    } finally {
+      setStartingZone(false);
     }
   };
 
@@ -770,6 +816,65 @@ function ZoneCard({ zone: initialZone }: { zone: RachioZone }) {
                     ? `${zone.cooldownPeriodDays} day${zone.cooldownPeriodDays !== 1 ? 's' : ''}`
                     : 'None'}
                 </div>
+              </div>
+            </div>
+
+            {/* Start Zone */}
+            <div className="mt-3 pt-3 border-t border-slate-200">
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Start Zone</div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="180"
+                    step="0.5"
+                    value={durationInput}
+                    onChange={(e) => {
+                      setDurationInput(e.target.value);
+                      setZoneStartError(null);
+                      setZoneStartSuccess(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !startingZone && durationInput.trim() !== '') {
+                        handleStartZone();
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="Duration (minutes, max 180)"
+                    disabled={startingZone || !zone.enabled}
+                  />
+                  <button
+                    onClick={handleStartZone}
+                    disabled={startingZone || !zone.enabled || durationInput.trim() === ''}
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!zone.enabled ? 'Zone is disabled' : 'Start watering this zone'}
+                  >
+                    {startingZone ? (
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Start
+                      </>
+                    )}
+                  </button>
+                </div>
+                {zoneStartError && (
+                  <div className="text-xs text-red-600">{zoneStartError}</div>
+                )}
+                {zoneStartSuccess && (
+                  <div className="text-xs text-green-600">Zone started successfully</div>
+                )}
+                {!zone.enabled && (
+                  <div className="text-xs text-slate-500 italic">Zone must be enabled to start watering</div>
+                )}
               </div>
             </div>
 
