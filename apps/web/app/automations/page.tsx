@@ -473,6 +473,7 @@ function RuleView({
   const [isExpanded, setIsExpanded] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [isStartingSchedule, setIsStartingSchedule] = useState(false);
   const isRachioSchedule = rule.source === 'rachio';
 
   // Fetch sensors for displaying names
@@ -1350,25 +1351,61 @@ function RuleView({
         {/* Actions */}
         <div className="flex gap-2 flex-wrap justify-end">
           {isRachioSchedule && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                isExpanded
-                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200'
-                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
-              }`}
-              aria-expanded={isExpanded}
-            >
-              <svg
-                className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <>
+              <button
+                onClick={async () => {
+                  if (!onStartSchedule || isStartingSchedule) return;
+                  setIsStartingSchedule(true);
+                  try {
+                    await onStartSchedule(rule.id);
+                  } catch (err) {
+                    // Error is handled by parent component
+                  } finally {
+                    setIsStartingSchedule(false);
+                  }
+                }}
+                disabled={isStartingSchedule || !onStartSchedule}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Start this schedule immediately"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              Details
-            </button>
+                {isStartingSchedule ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Start
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isExpanded
+                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200'
+                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                }`}
+                aria-expanded={isExpanded}
+              >
+                <svg
+                  className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                Details
+              </button>
+            </>
           )}
           {!isRachioSchedule && (
             <button
