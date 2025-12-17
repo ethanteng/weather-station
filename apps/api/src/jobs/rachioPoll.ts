@@ -218,13 +218,17 @@ export async function pollRachioData(): Promise<void> {
             continue;
           }
           
-          // Check if we already have this event stored (within 2 minutes window)
-          const existingEvent = await prisma.wateringEvent.findFirst({
+          // Check if we already have this event stored (within 5 minutes window)
+          // Also check if this is actually an automation event, not a schedule event
+          const timeWindowStart = new Date(eventTimestamp.getTime() - 5 * 60 * 1000);
+          const timeWindowEnd = new Date(eventTimestamp.getTime() + 5 * 60 * 1000);
+          
+          const existingScheduleEvent = await prisma.wateringEvent.findFirst({
             where: {
               zoneId: zoneId,
               timestamp: {
-                gte: new Date(eventTimestamp.getTime() - 2 * 60 * 1000), // Within 2 minutes
-                lte: new Date(eventTimestamp.getTime() + 2 * 60 * 1000),
+                gte: timeWindowStart,
+                lte: timeWindowEnd,
               },
               durationSec: {
                 // Allow some variance in duration (within 10 seconds)
@@ -235,7 +239,41 @@ export async function pollRachioData(): Promise<void> {
             },
           });
           
-          if (!existingEvent) {
+          // Check if this is actually an automation event (automations create watering events with source='automation')
+          const existingAutomationEvent = await prisma.wateringEvent.findFirst({
+            where: {
+              zoneId: zoneId,
+              timestamp: {
+                gte: timeWindowStart,
+                lte: timeWindowEnd,
+              },
+              durationSec: {
+                // Allow some variance in duration (within 10 seconds)
+                gte: durationSec - 10,
+                lte: durationSec + 10,
+              },
+              source: 'automation',
+            },
+          });
+          
+          // Also check audit logs for automation_triggered entries around this time
+          const automationAuditLog = await prisma.auditLog.findFirst({
+            where: {
+              action: 'automation_triggered',
+              source: 'automation',
+              timestamp: {
+                gte: timeWindowStart,
+                lte: timeWindowEnd,
+              },
+            },
+          });
+          
+          if (existingAutomationEvent || automationAuditLog) {
+            console.log(`  Skipping event - already exists as automation event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
+            continue; // Don't store as schedule event if it's actually an automation
+          }
+          
+          if (!existingScheduleEvent) {
             // Store the watering event
             await prisma.wateringEvent.create({
               data: {
@@ -248,7 +286,7 @@ export async function pollRachioData(): Promise<void> {
             });
             console.log(`  ✓ Stored schedule watering event for zone ${zoneName} (${zoneId}), duration ${durationSec}s at ${eventTimestamp.toISOString()}`);
           } else {
-            console.log(`  Skipping duplicate event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
+            console.log(`  Skipping duplicate schedule event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
           }
         }
       } catch (error: any) {
