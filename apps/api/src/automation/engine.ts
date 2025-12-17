@@ -564,7 +564,7 @@ async function executeAction(
 
 /**
  * Evaluate all automation rules from database
- * Runs every 5 minutes via cron job
+ * Runs twice daily (8 AM and 8 PM) via cron job
  */
 export async function evaluateRules(): Promise<void> {
   const apiKey = process.env.RACHIO_API_KEY;

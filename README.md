@@ -7,7 +7,7 @@ A production-ready system that integrates Ecowitt weather stations with Rachio i
 This system:
 - Fetches weather data from Ecowitt API v3 every 5 minutes
 - Syncs Rachio device and zone information every 15 minutes
-- Evaluates automation rules every 5 minutes
+- Evaluates automation rules twice daily (8 AM and 8 PM)
 - Provides a dashboard UI to monitor weather, soil moisture, and irrigation events
 - Automatically controls irrigation based on rainfall and soil moisture thresholds
 
@@ -160,7 +160,7 @@ The system includes three default automation rules:
 2. **Too Wet: Skip**: If soil_moisture ≥ 40% → set rain delay 24h
 3. **Too Dry: Boost**: If soil_moisture ≤ 20% AND rain_24h < 0.1" → run lawn zone 10 min
 
-Rules are evaluated every 5 minutes. Safety features:
+Rules are evaluated twice daily (8 AM and 8 PM). Safety features:
 - Maximum one watering per zone per 24 hours
 - All actions are logged to audit log
 - All watering events are stored in database
@@ -250,7 +250,7 @@ Audit trail of all system actions for debugging and compliance.
 
 - **Weather Poll**: Every 5 minutes - Fetches latest weather data from Ecowitt
 - **Rachio Poll**: Every 15 minutes - Syncs devices and zones from Rachio
-- **Automation Evaluation**: Every 5 minutes - Evaluates rules and takes actions
+- **Automation Evaluation**: Twice daily (8 AM and 8 PM) - Evaluates rules and takes actions
 
 ## Development
 

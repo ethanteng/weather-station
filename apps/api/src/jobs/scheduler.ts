@@ -31,8 +31,8 @@ export function startScheduler(): void {
     timezone: 'America/Los_Angeles',
   });
 
-  // Automation evaluation: every 5 minutes
-  automationJob = cron.schedule('*/5 * * * *', async () => {
+  // Automation evaluation: twice daily (8 AM and 8 PM)
+  automationJob = cron.schedule('0 8,20 * * *', async () => {
     console.log('Running automation evaluation job...');
     await evaluateRules();
   }, {
@@ -94,13 +94,13 @@ export function startScheduler(): void {
     console.log(`Job scheduler started`);
     console.log('  - Weather poll: every 5 minutes');
     console.log('  - Rachio poll: every 6 hours');
-    console.log('  - Automation evaluation: every 5 minutes');
+    console.log('  - Automation evaluation: twice daily (8 AM and 8 PM)');
     console.log(`  - Weather Underground upload: ${intervalDescription}`);
   } else {
     console.log('Job scheduler started');
     console.log('  - Weather poll: every 5 minutes');
     console.log('  - Rachio poll: every 6 hours');
-    console.log('  - Automation evaluation: every 5 minutes');
+    console.log('  - Automation evaluation: twice daily (8 AM and 8 PM)');
     console.log('  - Weather Underground upload: disabled');
   }
 }
