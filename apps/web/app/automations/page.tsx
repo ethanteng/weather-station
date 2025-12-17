@@ -136,6 +136,25 @@ export default function AutomationsPage() {
     }
   };
 
+  const handleDuplicate = async (rule: AutomationRule) => {
+    try {
+      // Create a copy of the rule with a new name
+      const duplicatedRule: Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'lastResult'> = {
+        name: `Copy of ${rule.name}`,
+        enabled: false, // Start disabled so user can review before enabling
+        conditions: { ...rule.conditions },
+        actions: { ...rule.actions },
+      };
+
+      const newRule = await automationApi.createRule(duplicatedRule);
+      // Open the duplicated rule in edit mode
+      setEditingId(newRule.id);
+      await fetchRules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to duplicate rule');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -308,6 +327,7 @@ export default function AutomationsPage() {
                           }}
                           onToggle={handleToggle}
                           onDelete={handleDelete}
+                          onDuplicate={handleDuplicate}
                           onStartSchedule={handleStartSchedule}
                           onSkipSchedule={handleSkipSchedule}
                         />
@@ -431,6 +451,7 @@ function RuleView({
   onEdit,
   onToggle,
   onDelete,
+  onDuplicate,
   onStartSchedule,
   onSkipSchedule,
 }: {
@@ -438,6 +459,7 @@ function RuleView({
   onEdit: () => void;
   onToggle: (id: string, enabled: boolean, source?: 'custom' | 'rachio') => void;
   onDelete: (id: string, source?: 'custom' | 'rachio') => void;
+  onDuplicate: (rule: AutomationRule) => void;
   onStartSchedule?: (id: string) => void;
   onSkipSchedule?: (id: string) => void;
 }) {
@@ -1380,6 +1402,15 @@ function RuleView({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Edit
+              </button>
+              <button
+                onClick={() => onDuplicate(rule)}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Duplicate
               </button>
               <button
                 onClick={() => onDelete(rule.id, rule.source)}
