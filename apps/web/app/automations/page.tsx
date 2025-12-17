@@ -393,6 +393,10 @@ export default function AutomationsPage() {
                                 }}
                                 onToggle={handleToggle}
                                 onDelete={handleDelete}
+                                onDuplicate={() => {
+                                  // Rachio schedules cannot be duplicated
+                                  alert('Rachio schedules cannot be duplicated. Please create a new custom rule instead.');
+                                }}
                                 onStartSchedule={handleStartSchedule}
                                 onSkipSchedule={handleSkipSchedule}
                               />
