@@ -78,6 +78,135 @@ export async function pollRachioData(): Promise<void> {
         console.log(`  Processed zone: ${zone.id} (${zone.name})`);
       }
 
+      // Fetch device events from Rachio API to get schedule watering events
+      // Look back 24 hours to catch recent schedule runs
+      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      
+      // Create a map of zone names to zone IDs for this device
+      const zoneNameToIdMap = new Map<string, string>();
+      for (const zone of zones) {
+        zoneNameToIdMap.set(zone.name.toLowerCase(), zone.id);
+        // Also map zone numbers (e.g., "Zone 1" -> zone.id)
+        const zoneNumberMatch = zone.name.match(/zone\s*(\d+)/i);
+        if (zoneNumberMatch) {
+          zoneNameToIdMap.set(`zone ${zoneNumberMatch[1]}`.toLowerCase(), zone.id);
+        }
+      }
+      
+      try {
+        const deviceEvents = await client.getDeviceEvents(device.id, twentyFourHoursAgo, now);
+        console.log(`  Fetched ${deviceEvents.length} device events for device ${device.id}`);
+        
+        // Process events to find schedule watering events
+        // Look for events with category "SCHEDULE" and type "ZONE_STATUS" (zone completed within schedule)
+        for (const event of deviceEvents) {
+          // Parse event timestamp - eventDate is in milliseconds
+          if (!event.eventDate || typeof event.eventDate !== 'number') {
+            continue; // Skip events without valid timestamps
+          }
+          
+          const eventTimestamp = new Date(event.eventDate);
+          if (isNaN(eventTimestamp.getTime())) {
+            continue; // Skip invalid timestamps
+          }
+          
+          // Check if this is a schedule zone completion event
+          // According to Rachio docs: category "SCHEDULE" and type "ZONE_STATUS" indicates zone completed within schedule
+          const isScheduleZoneEvent = event.category === 'SCHEDULE' && 
+                                      event.type === 'ZONE_STATUS' &&
+                                      event.summary?.toLowerCase().includes('completed');
+          
+          if (!isScheduleZoneEvent || !event.summary) {
+            continue; // Skip non-schedule zone events
+          }
+          
+          // Parse zone name from summary (e.g., "Zone 1 ya completed" or "Zone Frontyard completed")
+          const summary = event.summary.toLowerCase();
+          let zoneName: string | null = null;
+          
+          // Try to match zone name patterns
+          // Pattern 1: "Zone 1", "Zone 2", etc.
+          const zoneNumberMatch = summary.match(/zone\s*(\d+)/);
+          if (zoneNumberMatch) {
+            zoneName = `zone ${zoneNumberMatch[1]}`.toLowerCase();
+          } else {
+            // Pattern 2: Zone name appears before "completed" (e.g., "Zone Frontyard completed")
+            const zoneNameMatch = summary.match(/zone\s+([^ya\s]+)\s+(?:ya\s+)?completed/i);
+            if (zoneNameMatch) {
+              zoneName = zoneNameMatch[1].trim().toLowerCase();
+            }
+          }
+          
+          if (!zoneName) {
+            console.warn(`  Could not parse zone name from event summary: ${event.summary}`);
+            continue;
+          }
+          
+          // Find zone ID by matching zone name
+          const zoneId = zoneNameToIdMap.get(zoneName);
+          if (!zoneId) {
+            console.warn(`  Could not find zone ID for zone name "${zoneName}" from event: ${event.summary}`);
+            continue;
+          }
+          
+          // Parse duration from summary (e.g., "with a duration of 6 minutes")
+          // Duration can be in minutes or seconds
+          let durationSec: number | null = null;
+          const durationMinutesMatch = summary.match(/duration\s+of\s+(\d+)\s+minute/i);
+          const durationSecondsMatch = summary.match(/duration\s+of\s+(\d+)\s+second/i);
+          
+          if (durationMinutesMatch) {
+            durationSec = parseInt(durationMinutesMatch[1], 10) * 60;
+          } else if (durationSecondsMatch) {
+            durationSec = parseInt(durationSecondsMatch[1], 10);
+          }
+          
+          if (!durationSec || durationSec <= 0) {
+            console.warn(`  Could not parse duration from event summary: ${event.summary}`);
+            continue;
+          }
+          
+          // Check if we already have this event stored (within 2 minutes window)
+          const existingEvent = await prisma.wateringEvent.findFirst({
+            where: {
+              zoneId: zoneId,
+              timestamp: {
+                gte: new Date(eventTimestamp.getTime() - 2 * 60 * 1000), // Within 2 minutes
+                lte: new Date(eventTimestamp.getTime() + 2 * 60 * 1000),
+              },
+              durationSec: {
+                // Allow some variance in duration (within 10 seconds)
+                gte: durationSec - 10,
+                lte: durationSec + 10,
+              },
+              source: 'schedule',
+            },
+          });
+          
+          if (!existingEvent) {
+            // Store the watering event
+            await prisma.wateringEvent.create({
+              data: {
+                zoneId: zoneId,
+                durationSec: durationSec,
+                source: 'schedule',
+                timestamp: eventTimestamp,
+                rawPayload: event,
+              },
+            });
+            console.log(`  Stored schedule watering event for zone ${zoneName} (${zoneId}), duration ${durationSec}s at ${eventTimestamp.toISOString()}`);
+          }
+        }
+      } catch (error: any) {
+        // Don't fail the entire poll if event fetching fails (might be rate limited or API issue)
+        if (error instanceof RachioRateLimitError) {
+          console.warn(`  Skipping event fetch for device ${device.id} due to rate limit`);
+        } else {
+          console.warn(`  Could not fetch device events for device ${device.id}:`, error.message || error);
+        }
+      }
+
       // Check for schedule watering events that don't have audit log entries yet
       // Look for watering events with source='schedule' from the last 6 hours
       const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);

@@ -629,5 +629,34 @@ export class RachioClient {
       throw new Error(`Failed to skip schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  /**
+   * Get device events
+   * @param deviceId Device ID
+   * @param startTime Start time in milliseconds since Unix epoch
+   * @param endTime End time in milliseconds since Unix epoch
+   */
+  async getDeviceEvents(deviceId: string, startTime: number, endTime: number): Promise<any[]> {
+    try {
+      const response = await this.client.get(`/device/${deviceId}/event`, {
+        params: {
+          startTime,
+          endTime,
+        },
+      });
+      return response.data || [];
+    } catch (error: any) {
+      // Don't wrap RachioRateLimitError - let it propagate as-is
+      if (error instanceof RachioRateLimitError) {
+        throw error;
+      }
+      // If 404 or empty response, return empty array
+      if (error.response?.status === 404) {
+        return [];
+      }
+      console.error(`Error fetching device events for device ${deviceId}:`, error);
+      throw new Error(`Failed to fetch device events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }
 
