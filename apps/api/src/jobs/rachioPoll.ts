@@ -80,7 +80,7 @@ export async function pollRachioData(): Promise<void> {
 
       // Fetch device events from Rachio API to get schedule watering events
       // Look back 24 hours to catch recent schedule runs
-      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
       const now = Date.now();
       
       // Create a map of zone names to zone IDs for this device
@@ -95,7 +95,7 @@ export async function pollRachioData(): Promise<void> {
       }
       
       try {
-        const deviceEvents = await client.getDeviceEvents(device.id, twentyFourHoursAgo, now);
+        const deviceEvents = await client.getDeviceEvents(device.id, twentyFourHoursAgoMs, now);
         console.log(`  Fetched ${deviceEvents.length} device events for device ${device.id}`);
         
         // Debug: Log all events to see their structure
@@ -321,7 +321,7 @@ export async function pollRachioData(): Promise<void> {
           continue;
         }
 
-        console.log(`  Including event ${event.id} for zone ${event.zone.name} at ${event.timestamp.toISOString()}`);
+        console.log(`  Including event ${event.id} for zone ${event.zone?.name || event.zoneId} at ${event.timestamp.toISOString()}`);
 
         // Group events by 5-minute windows to identify schedule runs
         const timeWindow = Math.floor(event.timestamp.getTime() / (5 * 60 * 1000));
@@ -385,7 +385,7 @@ export async function pollRachioData(): Promise<void> {
               deviceName: device.name,
               zones: events.map(e => ({
                 zoneId: e.zoneId,
-                zoneName: e.zone.name,
+                zoneName: e.zone?.name || 'Unknown',
                 durationSec: e.durationSec,
                 durationMinutes: Math.round(e.durationSec / 60),
               })),
