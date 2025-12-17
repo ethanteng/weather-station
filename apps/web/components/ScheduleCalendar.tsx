@@ -295,6 +295,26 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
                       <div className="space-y-3">
                         {dayOccurrences.map((occurrence) => {
                           const zones = scheduleZonesMap.get(occurrence.scheduleId) || [];
+                          
+                          // Find the schedule to get startHour and startMinute
+                          const schedule = automations.find(a => a.id === occurrence.scheduleId);
+                          
+                          // Check if this scheduled run is in the past
+                          const occurrenceDate = new Date(occurrence.date + 'T00:00:00');
+                          const now = new Date();
+                          const isPastDate = occurrenceDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          
+                          // If it's today, check if the scheduled time has passed
+                          let isPastTime = false;
+                          if (!isPastDate && schedule && (schedule.startHour !== undefined && schedule.startMinute !== undefined)) {
+                            const scheduledTime = new Date(occurrenceDate);
+                            scheduledTime.setHours(schedule.startHour, schedule.startMinute, 0, 0);
+                            isPastTime = scheduledTime < now;
+                          }
+                          
+                          const isPast = isPastDate || isPastTime;
+                          const canSkip = occurrence.isNextOccurrence && !isPast;
+                          
                           return (
                             <div
                               key={`${occurrence.date}-${occurrence.scheduleId}`}
@@ -311,7 +331,7 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
                                     </div>
                                   )}
                                 </div>
-                                {occurrence.isNextOccurrence && (
+                                {canSkip && (
                                   <button
                                     onClick={() => handleSkipSchedule(occurrence.scheduleId)}
                                     disabled={skippingScheduleId === occurrence.scheduleId}
