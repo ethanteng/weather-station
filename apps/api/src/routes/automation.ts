@@ -294,8 +294,57 @@ router.get('/history', async (req: Request, res: Response) => {
       });
     }
     
+    // Filter out individual action entries (set_rain_delay, run_zone) that are part of automations
+    // when there's a corresponding automation_triggered summary entry
+    // This prevents duplicate entries in history
+    const automationTriggeredEntries = new Map<string, typeof auditLogs>();
+    auditLogs.forEach(log => {
+      if (log.action === 'automation_triggered') {
+        const details = log.details as any;
+        const ruleId = details.ruleId;
+        if (ruleId) {
+          // Group by ruleId and timestamp (within 1 minute) to match with individual actions
+          const timeKey = Math.floor(log.timestamp.getTime() / (60 * 1000)); // Round to nearest minute
+          const key = `${ruleId}_${timeKey}`;
+          if (!automationTriggeredEntries.has(key)) {
+            automationTriggeredEntries.set(key, []);
+          }
+          automationTriggeredEntries.get(key)!.push(log);
+        }
+      }
+    });
+    
+    // Filter out individual action entries that have a corresponding automation_triggered entry
+    const filteredAuditLogs = auditLogs.filter(log => {
+      // Keep automation_triggered entries
+      if (log.action === 'automation_triggered') {
+        return true;
+      }
+      
+      // Keep entries without ruleId (manual actions)
+      const details = log.details as any;
+      if (!details.ruleId) {
+        return true;
+      }
+      
+      // For individual action entries (set_rain_delay, run_zone) with ruleId,
+      // check if there's a corresponding automation_triggered entry
+      if (log.action === 'set_rain_delay' || log.action === 'run_zone') {
+        const ruleId = details.ruleId;
+        const timeKey = Math.floor(log.timestamp.getTime() / (60 * 1000));
+        const key = `${ruleId}_${timeKey}`;
+        
+        // If there's a corresponding automation_triggered entry, filter this one out
+        if (automationTriggeredEntries.has(key)) {
+          return false; // Filter out - we'll show the summary instead
+        }
+      }
+      
+      return true; // Keep other entries
+    });
+    
     // Transform audit logs to history entries
-    const history = auditLogs.map((log) => {
+    const history = filteredAuditLogs.map((log) => {
       const details = log.details as any;
       
       // Determine type and extract relevant information
