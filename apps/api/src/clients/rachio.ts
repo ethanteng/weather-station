@@ -171,6 +171,9 @@ export class RachioClient {
   // Static cache for schedules per device - refresh every 6 hours
   private static cachedSchedules: Map<string, { data: RachioSchedule[]; timestamp: number }> = new Map();
   private static readonly SCHEDULES_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours cache
+  // Static cache for current schedule per device - refresh every 1 minute (current schedules change when watering starts/stops)
+  private static cachedCurrentSchedules: Map<string, { data: { deviceId: string; scheduleId: string; type: string; status: string; startDate: number; duration: number; zoneId: string; zoneStartDate: number; zoneDuration: number; cycleCount: number; totalCycleCount: number; cycling: boolean; durationNoCycle: number; } | null; timestamp: number }> = new Map();
+  private static readonly CURRENT_SCHEDULE_CACHE_TTL = 60 * 1000; // 1 minute cache
 
   constructor(apiKey: string) {
 
@@ -469,13 +472,36 @@ export class RachioClient {
     cycling: boolean;
     durationNoCycle: number;
   } | null> {
+    // Check static cache first (shared across all instances)
+    const cached = RachioClient.cachedCurrentSchedules.get(deviceId);
+    if (cached && Date.now() - cached.timestamp < RachioClient.CURRENT_SCHEDULE_CACHE_TTL) {
+      // Return cached data without making API call
+      return cached.data;
+    }
+
     try {
       const response = await this.client.get(`/device/${deviceId}/current_schedule`);
-      return response.data;
+      const scheduleData = response.data;
+      
+      // Cache the result in static cache (shared across all instances)
+      RachioClient.cachedCurrentSchedules.set(deviceId, {
+        data: scheduleData,
+        timestamp: Date.now(),
+      });
+      
+      return scheduleData;
     } catch (error: any) {
-      // If 404, no schedule is running
+      // If 404, no schedule is running - cache null result
       if (error.response?.status === 404) {
+        RachioClient.cachedCurrentSchedules.set(deviceId, {
+          data: null,
+          timestamp: Date.now(),
+        });
         return null;
+      }
+      // Don't wrap RachioRateLimitError - let it propagate as-is
+      if (error instanceof RachioRateLimitError) {
+        throw error;
       }
       console.error(`Error fetching current schedule for device ${deviceId}:`, error);
       throw new Error(`Failed to fetch current schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
