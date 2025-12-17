@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { automationApi, AutomationRule, rachioApi, RachioZone, sensorApi, SoilMoistureSensor, SoilMoistureCondition, SoilMoistureSensorCondition } from '../../lib/api';
+import { automationApi, AutomationRule, rachioApi, RachioDevice, RachioZone, sensorApi, SoilMoistureSensor, SoilMoistureCondition, SoilMoistureSensorCondition } from '../../lib/api';
 import Link from 'next/link';
 import { ConfirmModal } from '../../components/ConfirmModal';
 
@@ -1393,6 +1393,8 @@ function RuleEditor({
   const [zones, setZones] = useState<RachioZone[]>([]);
   const [zoneDeviceMap, setZoneDeviceMap] = useState<Map<string, string>>(new Map()); // zoneId -> deviceName
   const [loadingZones, setLoadingZones] = useState(false);
+  const [devices, setDevices] = useState<RachioDevice[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [loadingSensors, setLoadingSensors] = useState(false);
   const [selectedSensors, setSelectedSensors] = useState<Array<{ channel: number; operator: string; value: string }>>([]);
@@ -1536,6 +1538,29 @@ function RuleEditor({
     }
   }, [rule, sensors]);
 
+  // Fetch devices when set_rain_delay action is selected
+  useEffect(() => {
+    const fetchDevices = async () => {
+      if (actions.type === 'set_rain_delay') {
+        setLoadingDevices(true);
+        try {
+          const deviceData = await rachioApi.getDevices();
+          setDevices(deviceData);
+        } catch (error) {
+          console.error('Error fetching devices:', error);
+          setDevices([]);
+        } finally {
+          setLoadingDevices(false);
+        }
+      } else {
+        // Clear devices when not using set_rain_delay
+        setDevices([]);
+      }
+    };
+
+    fetchDevices();
+  }, [actions.type]);
+
   // Fetch zones when run_zone action is selected
   useEffect(() => {
     const fetchZones = async () => {
@@ -1589,6 +1614,15 @@ function RuleEditor({
       : [...currentZoneIds, zoneId];
     
     setActions({ ...actions, zoneIds: newZoneIds });
+  };
+
+  const handleDeviceToggle = (deviceId: string) => {
+    const currentDeviceIds = actions.deviceIds || [];
+    const newDeviceIds = currentDeviceIds.includes(deviceId)
+      ? currentDeviceIds.filter(id => id !== deviceId)
+      : [...currentDeviceIds, deviceId];
+    
+    setActions({ ...actions, deviceIds: newDeviceIds });
   };
 
   return (
@@ -1831,9 +1865,10 @@ function RuleEditor({
               const newType = e.target.value as 'set_rain_delay' | 'run_zone';
               setActions({ 
                 type: newType, 
-                hours: undefined, 
-                minutes: undefined,
-                zoneIds: newType === 'run_zone' ? (actions.zoneIds || []) : undefined
+                hours: newType === 'set_rain_delay' ? (actions.hours || undefined) : undefined,
+                minutes: newType === 'run_zone' ? (actions.minutes || undefined) : undefined,
+                zoneIds: newType === 'run_zone' ? (actions.zoneIds || []) : undefined,
+                deviceIds: newType === 'set_rain_delay' ? (actions.deviceIds || []) : undefined
               });
             }}
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
@@ -1842,18 +1877,88 @@ function RuleEditor({
             <option value="run_zone">Run Zone(s)</option>
           </select>
           {actions.type === 'set_rain_delay' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Duration (Hours)</label>
-              <input
-                type="number"
-                min="1"
-                value={actions.hours || ''}
-                onChange={(e) => setActions({ ...actions, hours: parseInt(e.target.value) })}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                required
-                placeholder="48"
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Duration (Hours) <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min="1"
+                  value={actions.hours || ''}
+                  onChange={(e) => setActions({ ...actions, hours: parseInt(e.target.value) })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  required
+                  placeholder="48"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Device(s) <span className="text-slate-400 text-xs font-normal">(Optional - leave empty to apply to all devices)</span>
+                </label>
+                {loadingDevices ? (
+                  <div className="text-sm text-slate-500 py-2">Loading devices...</div>
+                ) : devices.length === 0 ? (
+                  <div className="text-sm text-amber-600 py-2 bg-amber-50 border border-amber-200 rounded-lg px-3">
+                    No devices found. Make sure your Rachio devices are synced.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {devices.map((device) => {
+                      const isSelected = (actions.deviceIds || []).includes(device.id);
+                      return (
+                        <div
+                          key={device.id}
+                          onClick={() => handleDeviceToggle(device.id)}
+                          className={`relative bg-white rounded-lg border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+                            isSelected
+                              ? 'border-blue-500 shadow-md ring-2 ring-blue-200'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          {/* Selection Indicator */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 z-10">
+                              <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Device Icon */}
+                          <div className="aspect-square bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
+                            <svg className="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                            </svg>
+                          </div>
+                          
+                          {/* Device Info */}
+                          <div className="p-3">
+                            <div className="text-sm font-semibold text-slate-900 truncate">{device.name}</div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              Status: <span className={`font-medium ${device.status === 'ONLINE' ? 'text-green-600' : 'text-slate-600'}`}>{device.status}</span>
+                            </div>
+                            {device.zones && device.zones.length > 0 && (
+                              <div className="text-xs text-slate-500 mt-1">
+                                {device.zones.length} zone{device.zones.length !== 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {(actions.deviceIds || []).length > 0 && (
+                  <p className="text-xs text-slate-600 mt-2">
+                    {(actions.deviceIds || []).length} device{(actions.deviceIds || []).length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+                {(actions.deviceIds || []).length === 0 && !loadingDevices && devices.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-2">No devices selected - will apply to all devices by default</p>
+                )}
+              </div>
+            </>
           )}
           {actions.type === 'run_zone' && (
             <>

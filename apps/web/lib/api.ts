@@ -200,6 +200,7 @@ export interface AutomationRule {
     hours?: number;
     minutes?: number;
     zoneIds?: string[]; // Array of zone IDs for run_zone action
+    deviceIds?: string[]; // Array of device IDs for set_rain_delay action (optional - defaults to all devices)
   };
   lastRunAt?: string | null;
   lastResult?: string | null;

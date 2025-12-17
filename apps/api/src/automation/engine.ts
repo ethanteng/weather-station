@@ -43,6 +43,7 @@ interface Actions {
   hours?: number;
   minutes?: number;
   zoneIds?: string[]; // Array of zone IDs for run_zone action
+  deviceIds?: string[]; // Array of device IDs for set_rain_delay action (optional - defaults to all devices)
 }
 
 /**
@@ -339,10 +340,20 @@ async function executeAction(
       return null;
     }
 
+    // Filter devices if deviceIds is specified, otherwise use all devices
+    const targetDevices = actions.deviceIds && actions.deviceIds.length > 0
+      ? devices.filter(device => actions.deviceIds!.includes(device.id))
+      : devices;
+
+    if (targetDevices.length === 0) {
+      console.log('No matching devices found for set_rain_delay action');
+      return null;
+    }
+
     const successfulDeviceIds: string[] = [];
     const failedDeviceIds: string[] = [];
 
-    for (const device of devices) {
+    for (const device of targetDevices) {
       try {
         await rachioClient.setRainDelay(device.id, actions.hours);
 
@@ -399,7 +410,7 @@ async function executeAction(
         hours: actions.hours,
         successfulDeviceIds,
         failedDeviceIds,
-        deviceCount: devices.length,
+        deviceCount: targetDevices.length,
       },
     };
   }
