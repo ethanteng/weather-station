@@ -23,6 +23,22 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
   const [pollingRachio, setPollingRachio] = useState(false);
+  const [currentSchedules, setCurrentSchedules] = useState<Record<string, {
+    deviceId: string;
+    scheduleId: string;
+    type: string;
+    status: string;
+    startDate: number;
+    duration: number;
+    zoneId: string;
+    zoneStartDate: number;
+    zoneDuration: number;
+    cycleCount: number;
+    totalCycleCount: number;
+    cycling: boolean;
+    durationNoCycle: number;
+  } | null>>({});
+  const [stoppingDevices, setStoppingDevices] = useState<Set<string>>(new Set());
   const [rachioRateLimit, setRachioRateLimit] = useState<{
     rateLimited: boolean;
     resetTime: string | null;
@@ -90,6 +106,23 @@ export default function Dashboard() {
       setWateringEvents(events);
       setSensors(sensorData.filter(s => s.enabled));
 
+      // Fetch current schedules for all devices
+      const schedulePromises = rachioDevices.map(async (device) => {
+        try {
+          const schedule = await rachioApi.getCurrentSchedule(device.id);
+          return { deviceId: device.id, schedule };
+        } catch (err) {
+          console.error(`Error fetching current schedule for device ${device.id}:`, err);
+          return { deviceId: device.id, schedule: null };
+        }
+      });
+      const scheduleResults = await Promise.all(schedulePromises);
+      const schedulesMap: Record<string, typeof scheduleResults[0]['schedule']> = {};
+      scheduleResults.forEach(({ deviceId, schedule }) => {
+        schedulesMap[deviceId] = schedule;
+      });
+      setCurrentSchedules(schedulesMap);
+
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -122,6 +155,52 @@ export default function Dashboard() {
     } catch (err) {
       // Silently fail - rate limit check is not critical
       console.error('Error checking rate limit status:', err);
+    }
+  };
+
+  const handleStopWatering = async (deviceId: string) => {
+    setStoppingDevices(prev => new Set(prev).add(deviceId));
+    try {
+      await rachioApi.stopWatering(deviceId);
+      // Refresh current schedules
+      const schedule = await rachioApi.getCurrentSchedule(deviceId);
+      setCurrentSchedules(prev => ({ ...prev, [deviceId]: schedule }));
+      setModal({
+        isOpen: true,
+        message: 'Watering stopped successfully',
+        type: 'success',
+      });
+    } catch (err: any) {
+      // Check if it's a rate limit error
+      if (err.response?.status === 429) {
+        const rateLimitData = err.response.data;
+        setRachioRateLimit({
+          rateLimited: true,
+          resetTime: rateLimitData.rateLimitReset || null,
+          remaining: rateLimitData.remaining,
+          limit: rateLimitData.limit,
+          message: rateLimitData.message,
+        });
+        setModal({
+          isOpen: true,
+          title: 'Rate Limit Exceeded',
+          message: rateLimitData.message || 'Please try again later.',
+          type: 'error',
+        });
+      } else {
+        setModal({
+          isOpen: true,
+          title: 'Stop Failed',
+          message: err instanceof Error ? err.message : 'Unknown error',
+          type: 'error',
+        });
+      }
+    } finally {
+      setStoppingDevices(prev => {
+        const next = new Set(prev);
+        next.delete(deviceId);
+        return next;
+      });
     }
   };
 
@@ -270,6 +349,120 @@ export default function Dashboard() {
                     rachioRateLimit.message || 'Please wait before making more requests.'
                   )}
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Current Running Schedules */}
+        {devices.length > 0 && Object.values(currentSchedules).some(s => s !== null) && (
+          <div className="mb-6">
+            <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-6 py-4 border-b border-slate-200">
+                <h2 className="text-lg sm:text-xl font-semibold text-white">Current Running Schedules</h2>
+              </div>
+              <div className="p-4 sm:p-6">
+                <div className="space-y-4">
+                  {devices.map((device) => {
+                    const currentSchedule = currentSchedules[device.id];
+                    const zone = device.zones.find(z => z.id === currentSchedule?.zoneId);
+                    const isStopping = stoppingDevices.has(device.id);
+                    
+                    if (!currentSchedule) {
+                      return null;
+                    }
+
+                      const startTime = new Date(currentSchedule.startDate);
+                      const elapsedSeconds = Math.floor((Date.now() - currentSchedule.startDate) / 1000);
+                      const remainingSeconds = Math.max(0, currentSchedule.duration - elapsedSeconds);
+                      const remainingMinutes = Math.floor(remainingSeconds / 60);
+                      const remainingSecs = remainingSeconds % 60;
+
+                      return (
+                        <div
+                          key={device.id}
+                          className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200"
+                        >
+                          <div className="flex items-start justify-between gap-4 flex-wrap">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-lg font-semibold text-slate-900">{device.name}</h3>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  currentSchedule.status === 'PROCESSING'
+                                    ? 'bg-green-100 text-green-800 border border-green-300'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                }`}>
+                                  {currentSchedule.status === 'PROCESSING' ? 'Running' : currentSchedule.status}
+                                </span>
+                                {currentSchedule.type && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                    {currentSchedule.type}
+                                  </span>
+                                )}
+                              </div>
+                              {zone && (
+                                <div className="text-sm text-slate-700 mb-2">
+                                  <span className="font-medium">Zone:</span> {zone.name}
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                                <div>
+                                  <span className="text-slate-600">Started:</span>
+                                  <div className="font-medium text-slate-900">
+                                    {startTime.toLocaleTimeString()}
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="text-slate-600">Duration:</span>
+                                  <div className="font-medium text-slate-900">
+                                    {Math.floor(currentSchedule.duration / 60)} min
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="text-slate-600">Remaining:</span>
+                                  <div className="font-medium text-slate-900">
+                                    {remainingMinutes}m {remainingSecs}s
+                                  </div>
+                                </div>
+                                {currentSchedule.cycling && (
+                                  <div>
+                                    <span className="text-slate-600">Cycle:</span>
+                                    <div className="font-medium text-slate-900">
+                                      {currentSchedule.cycleCount}/{currentSchedule.totalCycleCount}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleStopWatering(device.id)}
+                              disabled={isStopping || rachioRateLimit?.rateLimited}
+                              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                              title={rachioRateLimit?.rateLimited ? 'Rate limited' : 'Stop watering on this device'}
+                            >
+                              {isStopping ? (
+                                <>
+                                  <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Stopping...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6m-6 4h6" />
+                                  </svg>
+                                  Stop Watering
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                  })}
+                </div>
               </div>
             </div>
           </div>

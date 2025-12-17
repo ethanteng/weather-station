@@ -447,6 +447,39 @@ export class RachioClient {
   }
 
   /**
+   * Get current running schedule for a device
+   * @param deviceId Device ID
+   * @returns Current schedule data or null if no schedule is running
+   */
+  async getCurrentSchedule(deviceId: string): Promise<{
+    deviceId: string;
+    scheduleId: string;
+    type: string;
+    status: string;
+    startDate: number;
+    duration: number;
+    zoneId: string;
+    zoneStartDate: number;
+    zoneDuration: number;
+    cycleCount: number;
+    totalCycleCount: number;
+    cycling: boolean;
+    durationNoCycle: number;
+  } | null> {
+    try {
+      const response = await this.client.get(`/device/${deviceId}/current_schedule`);
+      return response.data;
+    } catch (error: any) {
+      // If 404, no schedule is running
+      if (error.response?.status === 404) {
+        return null;
+      }
+      console.error(`Error fetching current schedule for device ${deviceId}:`, error);
+      throw new Error(`Failed to fetch current schedule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Get schedules for a specific device
    * @param deviceId Device ID
    */

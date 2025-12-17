@@ -341,6 +341,46 @@ export const rachioApi = {
     });
     return response.data;
   },
+
+  async getCurrentSchedule(deviceId: string): Promise<{
+    deviceId: string;
+    scheduleId: string;
+    type: string;
+    status: string;
+    startDate: number;
+    duration: number;
+    zoneId: string;
+    zoneStartDate: number;
+    zoneDuration: number;
+    cycleCount: number;
+    totalCycleCount: number;
+    cycling: boolean;
+    durationNoCycle: number;
+  } | null> {
+    const response = await api.get<{
+      deviceId: string;
+      scheduleId: string;
+      type: string;
+      status: string;
+      startDate: number;
+      duration: number;
+      zoneId: string;
+      zoneStartDate: number;
+      zoneDuration: number;
+      cycleCount: number;
+      totalCycleCount: number;
+      cycling: boolean;
+      durationNoCycle: number;
+    } | null>(`/api/rachio/devices/${deviceId}/current-schedule`);
+    return response.data;
+  },
+
+  async stopWatering(deviceId: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/rachio/stop', {
+      deviceId,
+    });
+    return response.data;
+  },
 };
 
 type ScheduleZone = {

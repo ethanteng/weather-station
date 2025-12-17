@@ -571,6 +571,40 @@ router.post('/poll', async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/rachio/devices/:deviceId/current-schedule
+ * Get current running schedule for a device
+ */
+router.get('/devices/:deviceId/current-schedule', async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId required' });
+    }
+
+    const apiKey = process.env.RACHIO_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Rachio API key not configured' });
+    }
+
+    const client = new RachioClient(apiKey);
+    const currentSchedule = await client.getCurrentSchedule(deviceId);
+
+    if (!currentSchedule) {
+      return res.json(null);
+    }
+
+    return res.json(currentSchedule);
+  } catch (error) {
+    if (handleRateLimitError(error, res)) {
+      return;
+    }
+    console.error('Error fetching current schedule:', error);
+    return res.status(500).json({ error: 'Failed to fetch current schedule' });
+  }
+});
+
+/**
  * GET /api/rachio/rate-limit-status
  * Get current rate limit status
  */
