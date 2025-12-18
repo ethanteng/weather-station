@@ -1,6 +1,7 @@
 /**
  * Script to remove all schedule-related data from database
  * Removes all schedule audit logs and watering events so they can be re-pulled with corrected logic
+ * Also removes watering events with category: undefined or summary containing "Quick Run"
  * Run with: npm run db:remove-incorrect-schedule --workspace=apps/api
  */
 
@@ -63,11 +64,44 @@ async function removeIncorrectSchedule() {
       },
     });
     
+    // Find watering events with category: undefined or summary containing "Quick Run"
+    const allWateringEvents = await prisma.wateringEvent.findMany({
+      include: {
+        zone: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+    
+    const invalidRachioEvents = allWateringEvents.filter(event => {
+      const rawPayload = event.rawPayload as any;
+      
+      // If rawPayload exists and looks like a Rachio event (has category field)
+      if (rawPayload && typeof rawPayload === 'object' && 'category' in rawPayload) {
+        // Exclude events with undefined category
+        if (rawPayload.category === undefined) {
+          return true;
+        }
+        
+        // Exclude events where summary includes "Quick Run"
+        if (rawPayload.summary && typeof rawPayload.summary === 'string') {
+          if (rawPayload.summary.toLowerCase().includes('quick run')) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    });
+    
     console.log(`\nFound ${scheduleAuditLogs.length} schedule audit log entry/entries`);
     console.log(`Found ${scheduleWateringEvents.length} schedule watering event(s)`);
+    console.log(`Found ${invalidRachioEvents.length} invalid Rachio event(s) (category: undefined or "Quick Run")`);
     
-    if (scheduleAuditLogs.length === 0 && scheduleWateringEvents.length === 0) {
-      console.log('\nNo schedule data found. Nothing to clean up.');
+    if (scheduleAuditLogs.length === 0 && scheduleWateringEvents.length === 0 && invalidRachioEvents.length === 0) {
+      console.log('\nNo data found. Nothing to clean up.');
       return;
     }
     
@@ -81,11 +115,24 @@ async function removeIncorrectSchedule() {
     }
     
     if (scheduleWateringEvents.length > 0) {
-      console.log(`\n${scheduleWateringEvents.length} watering event(s) to be deleted`);
+      console.log(`\n${scheduleWateringEvents.length} schedule watering event(s) to be deleted`);
+    }
+    
+    if (invalidRachioEvents.length > 0) {
+      console.log(`\nInvalid Rachio events to be deleted:`);
+      invalidRachioEvents.forEach(event => {
+        const rawPayload = event.rawPayload as any;
+        const reason = rawPayload?.category === undefined 
+          ? 'category: undefined' 
+          : 'summary contains "Quick Run"';
+        console.log(`  - Zone: ${event.zone.name || event.zoneId}, ${event.timestamp.toISOString()}, Reason: ${reason}`);
+      });
     }
     
     // Prompt for confirmation
-    console.log('\n⚠️  WARNING: This will delete ALL schedule-related data.');
+    console.log('\n⚠️  WARNING: This will delete:');
+    console.log('  - ALL schedule-related data (audit logs and watering events)');
+    console.log('  - Invalid Rachio events (category: undefined or "Quick Run")');
     console.log('After deletion, rachioPoll.ts will re-process events with the new simplified logic.');
     console.log('\nType "yes" to confirm deletion, or anything else to cancel:');
     
@@ -106,7 +153,7 @@ async function removeIncorrectSchedule() {
       return;
     }
     
-    console.log('\nDeleting schedule data...');
+    console.log('\nDeleting data...');
     
     // Delete all schedule audit logs
     let deletedAuditLogs = 0;
@@ -118,15 +165,25 @@ async function removeIncorrectSchedule() {
     }
     
     // Delete all schedule watering events
-    const deletedWateringEvents = await prisma.wateringEvent.deleteMany({
+    const deletedScheduleWateringEvents = await prisma.wateringEvent.deleteMany({
       where: {
         source: 'schedule',
       },
     });
     
+    // Delete invalid Rachio events
+    let deletedInvalidEvents = 0;
+    for (const event of invalidRachioEvents) {
+      await prisma.wateringEvent.delete({
+        where: { id: event.id },
+      });
+      deletedInvalidEvents++;
+    }
+    
     console.log(`\n✓ Successfully deleted ${deletedAuditLogs} schedule audit log entry/entries`);
-    console.log(`✓ Successfully deleted ${deletedWateringEvents.count} schedule watering event(s)`);
-    console.log('\nSchedule data has been cleaned up. rachioPoll.ts will re-process events with the new logic.');
+    console.log(`✓ Successfully deleted ${deletedScheduleWateringEvents.count} schedule watering event(s)`);
+    console.log(`✓ Successfully deleted ${deletedInvalidEvents} invalid Rachio event(s)`);
+    console.log('\nData has been cleaned up. rachioPoll.ts will re-process events with the new logic.');
   } catch (error) {
     console.error('Error removing incorrect schedule entry:', error);
     process.exit(1);
