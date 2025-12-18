@@ -287,11 +287,29 @@ export default function HistoryPage() {
                                       );
                                     })}
                                   </div>
-                                  {entry.actionDetails.startTime && entry.actionDetails.finishTime && (
+                                  {entry.actionDetails.startTime && (
                                     <div className="text-sm text-slate-700">
                                       <span className="font-semibold">Duration:</span>{' '}
                                       {formatDuration(entry.actionDetails.totalDurationMinutes)} (
-                                      {formatTime(entry.actionDetails.startTime)} - {formatTime(entry.actionDetails.finishTime)})
+                                      {(() => {
+                                        const startTime = new Date(entry.actionDetails.startTime);
+                                        // Calculate finish time: use provided finishTime, or calculate from startTime + duration
+                                        let finishTime: Date;
+                                        if (entry.actionDetails.finishTime) {
+                                          finishTime = new Date(entry.actionDetails.finishTime);
+                                          // If finishTime is same as startTime (incorrect data), calculate it
+                                          if (finishTime.getTime() === startTime.getTime() && entry.actionDetails.totalDurationMinutes) {
+                                            finishTime = new Date(startTime.getTime() + entry.actionDetails.totalDurationMinutes * 60 * 1000);
+                                          }
+                                        } else if (entry.actionDetails.totalDurationMinutes) {
+                                          // Calculate finish time from duration
+                                          finishTime = new Date(startTime.getTime() + entry.actionDetails.totalDurationMinutes * 60 * 1000);
+                                        } else {
+                                          // Fallback: use startTime if no duration available
+                                          finishTime = startTime;
+                                        }
+                                        return `${formatTime(entry.actionDetails.startTime)} - ${formatTime(finishTime.toISOString())}`;
+                                      })()})
                                     </div>
                                   )}
                                 </div>

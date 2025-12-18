@@ -502,9 +502,10 @@ export async function pollRachioData(): Promise<void> {
         const startTime = events.reduce((earliest, event) => 
           event.timestamp < earliest ? event.timestamp : earliest, events[0].timestamp
         );
-        const finishTime = events.reduce((latest, event) => 
-          event.timestamp > latest ? event.timestamp : latest, events[0].timestamp
-        );
+        // Calculate total duration in seconds
+        const totalDurationSec = events.reduce((sum, event) => sum + event.durationSec, 0);
+        // Finish time is start time + total duration
+        const finishTime = new Date(startTime.getTime() + totalDurationSec * 1000);
 
         // Create audit log entry for this schedule run
         await prisma.auditLog.create({
