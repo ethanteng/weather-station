@@ -255,7 +255,7 @@ export async function pollRachioData(): Promise<void> {
           let isAutomationTriggered = false;
           for (const log of automationAuditLogs) {
             const details = log.details as any;
-            const zoneIds = details?.resultDetails?.zoneIds || [];
+            const zoneIds: string[] = details?.resultDetails?.zoneIds || [];
             if (Array.isArray(zoneIds) && zoneIds.includes(zoneId)) {
               isAutomationTriggered = true;
               break;
@@ -284,7 +284,7 @@ export async function pollRachioData(): Promise<void> {
               break;
             }
             // Also check zoneIds array if present
-            const zoneIds = runZoneDetails?.zoneIds || [];
+            const zoneIds: string[] = runZoneDetails?.zoneIds || [];
             if (Array.isArray(zoneIds) && zoneIds.includes(zoneId)) {
               isAutomationRunZone = true;
               break;
@@ -428,7 +428,7 @@ export async function pollRachioData(): Promise<void> {
           
           if (log.action === 'automation_triggered') {
             // Check resultDetails.zoneIds array
-            const zoneIds = details?.resultDetails?.zoneIds || [];
+            const zoneIds: string[] = details?.resultDetails?.zoneIds || [];
             if (Array.isArray(zoneIds) && zoneIds.includes(event.zoneId)) {
               isAutomationAuditLog = true;
               break;
@@ -440,7 +440,7 @@ export async function pollRachioData(): Promise<void> {
               break;
             }
             // Also check zoneIds array if present
-            const zoneIds = details?.zoneIds || [];
+            const zoneIds: string[] = details?.zoneIds || [];
             if (Array.isArray(zoneIds) && zoneIds.includes(event.zoneId)) {
               isAutomationAuditLog = true;
               break;
