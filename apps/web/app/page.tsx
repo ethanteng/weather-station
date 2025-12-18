@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [devices, setDevices] = useState<RachioDevice[]>([]);
   const [wateringEvents, setWateringEvents] = useState<WateringEvent[]>([]);
   const [automations, setAutomations] = useState<AutomationRule[]>([]);
+  const [activeAutomations, setActiveAutomations] = useState<AutomationRule[]>([]);
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,10 +95,13 @@ export default function Dashboard() {
       setDevices(rachioDevices);
       
       // Handle automation rules response (can be array or object with rateLimitError)
+      let automationRules: AutomationRule[] = [];
       if (Array.isArray(automationRulesResponse)) {
+        automationRules = automationRulesResponse;
         setAutomations(automationRulesResponse);
       } else if (automationRulesResponse && typeof automationRulesResponse === 'object' && 'rules' in automationRulesResponse) {
-        setAutomations((automationRulesResponse as any).rules || []);
+        automationRules = (automationRulesResponse as any).rules || [];
+        setAutomations(automationRules);
         // Note: Rate limit info for dashboard is handled separately via getRateLimitStatus
       } else {
         setAutomations([]);
@@ -123,10 +127,60 @@ export default function Dashboard() {
       });
       setCurrentSchedules(schedulesMap);
 
+      // Check which automations are currently "In Effect"
+      await checkActiveAutomations(automationRules);
+
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
       setLoading(false);
+    }
+  };
+
+  const checkActiveAutomations = async (rules: AutomationRule[]) => {
+    if (!authToken) return;
+
+    try {
+      // Set auth token for API calls
+      const { setAuthToken: setApiAuth } = await import('../lib/api');
+      setApiAuth(authToken);
+
+      // Filter to only enabled custom rules (not Rachio schedules)
+      const customRules = rules.filter(
+        (rule) => rule.enabled && rule.source !== 'rachio'
+      );
+
+      // Check status for each rule in parallel
+      const statusChecks = await Promise.allSettled(
+        customRules.map(async (rule) => {
+          try {
+            const status = await automationApi.checkRuleStatus(rule.id);
+            return { rule, inEffect: status.inEffect };
+          } catch (error) {
+            console.error(`Error checking status for rule ${rule.id}:`, error);
+            return { rule, inEffect: false };
+          }
+        })
+      );
+
+      // Filter to only rules that are "In Effect"
+      const active = statusChecks
+        .filter(
+          (result) =>
+            result.status === 'fulfilled' && result.value.inEffect === true
+        )
+        .map((result) => {
+          if (result.status === 'fulfilled') {
+            return result.value.rule;
+          }
+          return null;
+        })
+        .filter((rule): rule is AutomationRule => rule !== null);
+
+      setActiveAutomations(active);
+    } catch (err) {
+      console.error('Error checking active automations:', err);
+      setActiveAutomations([]);
     }
   };
 
@@ -511,6 +565,34 @@ export default function Dashboard() {
                       );
                   })}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Automations Notification */}
+        {activeAutomations.length > 0 && (
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-blue-800 font-medium mb-1">Active Automations</p>
+                <p className="text-blue-700 text-sm mb-2">
+                  The following automation{activeAutomations.length > 1 ? 's are' : ' is'} currently in effect:
+                </p>
+                <ul className="list-disc list-inside text-blue-700 text-sm mb-2 space-y-1">
+                  {activeAutomations.map((automation) => (
+                    <li key={automation.id}>{automation.name}</li>
+                  ))}
+                </ul>
+                <Link
+                  href="/automations"
+                  className="text-sm text-blue-600 hover:text-blue-700 underline font-medium"
+                >
+                  View all automations →
+                </Link>
               </div>
             </div>
           </div>
