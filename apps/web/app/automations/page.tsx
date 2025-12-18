@@ -490,9 +490,9 @@ function RuleView({
     fetchSensors();
   }, []);
 
-  // Check if rule is currently in effect (only for custom rules)
+  // Check if rule is currently in effect (only for custom rules with set_rain_delay action)
   useEffect(() => {
-    if (isRachioSchedule || !rule.enabled) {
+    if (isRachioSchedule || !rule.enabled || rule.actions.type !== 'set_rain_delay') {
       setIsInEffect(false);
       return;
     }
@@ -508,7 +508,7 @@ function RuleView({
     };
 
     checkStatus();
-  }, [rule.id, rule.enabled, isRachioSchedule]);
+  }, [rule.id, rule.enabled, rule.actions.type, isRachioSchedule]);
 
   // Formatting helper functions
   const formatInterval = (interval?: number, scheduleJobTypes?: string[], summary?: string): string => {
@@ -920,7 +920,7 @@ function RuleView({
                   </>
                 )}
               </span>
-              {!isRachioSchedule && isInEffect === true && (
+              {!isRachioSchedule && rule.actions.type === 'set_rain_delay' && isInEffect === true && (
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
                   <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                   In Effect
