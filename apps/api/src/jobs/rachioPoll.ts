@@ -104,7 +104,7 @@ export async function pollRachioData(): Promise<void> {
         }
         
         // Process events to find schedule watering events
-        // Look for events with category "SCHEDULE" and type "ZONE_STATUS" (zone completed within schedule)
+        // Only process events with category='SCHEDULE', type='SCHEDULE_STATUS', and subType='SCHEDULE_COMPLETED'
         for (const event of deviceEvents) {
           // Parse event timestamp - eventDate is in milliseconds
           if (!event.eventDate || typeof event.eventDate !== 'number') {
@@ -118,34 +118,23 @@ export async function pollRachioData(): Promise<void> {
             continue; // Skip invalid timestamps
           }
           
-          // Check if this is a schedule zone completion event
-          // Events can be:
-          // 1. SCHEDULE_STATUS with subType "SCHEDULE_COMPLETED" and summary like "Zone 1 ran for X minutes"
-          // 2. ZONE_STATUS with summary "Zone X completed watering..." (category may be undefined)
-          // 3. SCHEDULE category with ZONE_STATUS type and "completed" in summary
-          const summaryLower = event.summary?.toLowerCase() || '';
-          const isCompleted = summaryLower.includes('completed') || 
-                             summaryLower.includes('ran for') ||
-                             event.subType === 'SCHEDULE_COMPLETED';
+          // Check if this is a schedule completion event
+          // Only process events with category='SCHEDULE', type='SCHEDULE_STATUS', and subType='SCHEDULE_COMPLETED'
+          const isScheduleEvent = 
+            event.category === 'SCHEDULE' && 
+            event.type === 'SCHEDULE_STATUS' &&
+            event.subType === 'SCHEDULE_COMPLETED' &&
+            event.summary;
           
-          const isScheduleZoneEvent = isCompleted && (
-            // SCHEDULE_STATUS with SCHEDULE_COMPLETED subType
-            (event.category === 'SCHEDULE' && event.type === 'SCHEDULE_STATUS' && event.subType === 'SCHEDULE_COMPLETED') ||
-            // ZONE_STATUS events (category may be undefined for schedule zone completions)
-            (event.type === 'ZONE_STATUS' && summaryLower.includes('completed')) ||
-            // SCHEDULE category with ZONE_STATUS type
-            (event.category === 'SCHEDULE' && event.type === 'ZONE_STATUS' && summaryLower.includes('completed'))
-          );
-          
-          if (!isScheduleZoneEvent || !event.summary) {
-            console.log(`  Skipping event - not a schedule zone completion:`, {
+          if (!isScheduleEvent) {
+            console.log(`  Skipping event - not a schedule completion:`, {
               id: event.id,
               category: event.category,
               type: event.type,
               subType: event.subType,
               summary: event.summary?.substring(0, 100)
             });
-            continue; // Skip non-schedule zone events
+            continue; // Skip non-schedule events
           }
           
           console.log(`  Processing schedule event:`, {
@@ -157,10 +146,7 @@ export async function pollRachioData(): Promise<void> {
           });
           
           // Parse zone name from summary
-          // Examples from actual events:
-          // - "Zone 1 ran for 24 minutes." (SCHEDULE_STATUS)
-          // - "Zone 1 completed watering at 04:23 AM (PST) for 24 minutes." (ZONE_STATUS)
-          // - "Zone 1 ya completed with a duration of 6 minutes" (from docs)
+          // Format: "Zone X ran for Y minutes."
           const summary = event.summary.toLowerCase();
           let zoneName: string | null = null;
           
@@ -189,10 +175,7 @@ export async function pollRachioData(): Promise<void> {
           }
           
           // Parse duration from summary
-          // Examples:
-          // - "ran for 24 minutes"
-          // - "completed watering ... for 24 minutes"
-          // - "with a duration of 6 minutes" (from docs)
+          // Format: "Zone X ran for Y minutes."
           let durationSec: number | null = null;
           
           // Pattern 1: "ran for X minutes" or "for X minutes"
@@ -257,7 +240,7 @@ export async function pollRachioData(): Promise<void> {
           });
           
           // Also check audit logs for automation_triggered entries around this time
-          const automationAuditLog = await prisma.auditLog.findFirst({
+          const automationAuditLogs = await prisma.auditLog.findMany({
             where: {
               action: 'automation_triggered',
               source: 'automation',
@@ -268,8 +251,19 @@ export async function pollRachioData(): Promise<void> {
             },
           });
           
+          // Check if any automation_triggered log includes this zoneId in resultDetails.zoneIds
+          let isAutomationTriggered = false;
+          for (const log of automationAuditLogs) {
+            const details = log.details as any;
+            const zoneIds = details?.resultDetails?.zoneIds || [];
+            if (Array.isArray(zoneIds) && zoneIds.includes(zoneId)) {
+              isAutomationTriggered = true;
+              break;
+            }
+          }
+          
           // Also check for run_zone audit log entries (automations create these when they run zones)
-          const automationRunZoneLog = await prisma.auditLog.findFirst({
+          const automationRunZoneLogs = await prisma.auditLog.findMany({
             where: {
               action: 'run_zone',
               source: 'automation',
@@ -280,16 +274,24 @@ export async function pollRachioData(): Promise<void> {
             },
           });
           
-          // Check if the run_zone log is for this specific zone
+          // Check if any run_zone log is for this specific zone
           let isAutomationRunZone = false;
-          if (automationRunZoneLog) {
-            const runZoneDetails = automationRunZoneLog.details as any;
+          for (const log of automationRunZoneLogs) {
+            const runZoneDetails = log.details as any;
+            // Check single zoneId field
             if (runZoneDetails?.zoneId === zoneId) {
               isAutomationRunZone = true;
+              break;
+            }
+            // Also check zoneIds array if present
+            const zoneIds = runZoneDetails?.zoneIds || [];
+            if (Array.isArray(zoneIds) && zoneIds.includes(zoneId)) {
+              isAutomationRunZone = true;
+              break;
             }
           }
           
-          if (existingAutomationEvent || automationAuditLog || isAutomationRunZone) {
+          if (existingAutomationEvent || isAutomationTriggered || isAutomationRunZone) {
             console.log(`  Skipping event - already exists as automation event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
             continue; // Don't store as schedule event if it's actually an automation
           }
@@ -400,7 +402,7 @@ export async function pollRachioData(): Promise<void> {
           },
         });
         
-        const isAutomationAuditLog = await prisma.auditLog.findFirst({
+        const automationAuditLogs = await prisma.auditLog.findMany({
           where: {
             OR: [
               {
@@ -418,6 +420,33 @@ export async function pollRachioData(): Promise<void> {
             },
           },
         });
+        
+        // Check if any automation log matches this zone
+        let isAutomationAuditLog = false;
+        for (const log of automationAuditLogs) {
+          const details = log.details as any;
+          
+          if (log.action === 'automation_triggered') {
+            // Check resultDetails.zoneIds array
+            const zoneIds = details?.resultDetails?.zoneIds || [];
+            if (Array.isArray(zoneIds) && zoneIds.includes(event.zoneId)) {
+              isAutomationAuditLog = true;
+              break;
+            }
+          } else if (log.action === 'run_zone') {
+            // Check single zoneId field
+            if (details?.zoneId === event.zoneId) {
+              isAutomationAuditLog = true;
+              break;
+            }
+            // Also check zoneIds array if present
+            const zoneIds = details?.zoneIds || [];
+            if (Array.isArray(zoneIds) && zoneIds.includes(event.zoneId)) {
+              isAutomationAuditLog = true;
+              break;
+            }
+          }
+        }
         
         if (isAutomationEvent || isAutomationAuditLog) {
           console.log(`  Skipping event ${event.id} - appears to be an automation event, not a schedule`);

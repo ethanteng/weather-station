@@ -1,6 +1,6 @@
 /**
- * Script to remove incorrect schedule entries from database
- * Specifically removes "All Other Zones (Backyard) 3:00 AM" entry that was incorrectly classified as a schedule
+ * Script to remove all schedule-related data from database
+ * Removes all schedule audit logs and watering events so they can be re-pulled with corrected logic
  * Run with: npm run db:remove-incorrect-schedule --workspace=apps/api
  */
 
@@ -40,105 +40,93 @@ if (!process.env.DATABASE_URL) {
 }
 
 import { PrismaClient } from '@prisma/client';
+import * as readline from 'readline';
 
 const prisma = new PrismaClient();
 
 async function removeIncorrectSchedule() {
   try {
-    console.log('Searching for incorrect schedule entry...');
+    console.log('Searching for all schedule-related data...');
     
-    // Find audit log entries for schedule runs on Dec 17, 2025 around 3:00 AM PST (11:00 UTC)
-    // Looking for Zone 6 (Backyard) entries or "All Other Zones" schedule
-    const startDate = new Date('2025-12-17T11:00:00Z'); // 3:00 AM PST = 11:00 UTC
-    const endDate = new Date('2025-12-17T11:30:00Z');
-    
-    const scheduleEntries = await prisma.auditLog.findMany({
+    // Find all schedule audit log entries
+    const scheduleAuditLogs = await prisma.auditLog.findMany({
       where: {
         source: 'rachio_schedule',
         action: 'rachio_schedule_ran',
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
       },
     });
     
-    console.log(`Found ${scheduleEntries.length} schedule entry/entries in the time window (3:00 AM PST)`);
-    
-    // Find entries that match:
-    // 1. Schedule name contains "All Other Zones" OR
-    // 2. Zone 6 is in the zones list
-    const matchingEntries = scheduleEntries.filter(entry => {
-      const details = entry.details as any;
-      const scheduleName = (details.scheduleName || '').toLowerCase();
-      
-      // Check if schedule name matches
-      if (scheduleName.includes('all other zones')) {
-        return true;
-      }
-      
-      // Check if Zone 6 is in the zones
-      if (details.zones && Array.isArray(details.zones)) {
-        return details.zones.some((z: any) => 
-          z.zoneName === 'Zone 6' || 
-          z.zoneId === 'b2b58b28-cce5-4bce-8dc4-a70840c9303e' // Zone 6 ID from logs
-        );
-      }
-      
-      return false;
+    // Find all schedule watering events
+    const scheduleWateringEvents = await prisma.wateringEvent.findMany({
+      where: {
+        source: 'schedule',
+      },
     });
     
-    console.log(`Found ${matchingEntries.length} matching entry/entries`);
+    console.log(`\nFound ${scheduleAuditLogs.length} schedule audit log entry/entries`);
+    console.log(`Found ${scheduleWateringEvents.length} schedule watering event(s)`);
     
-    if (matchingEntries.length === 0) {
-      console.log('\nNo matching entries found. Listing all schedule entries in time window:');
-      scheduleEntries.forEach(entry => {
-        const details = entry.details as any;
-        console.log(`  Entry ID: ${entry.id}`);
-        console.log(`    Schedule: ${details.scheduleName || 'Unknown'}`);
-        console.log(`    Timestamp: ${entry.timestamp.toISOString()}`);
-        console.log(`    Zones:`, details.zones?.map((z: any) => `${z.zoneName} (${z.durationMinutes}min)`).join(', ') || 'None');
-        console.log('');
-      });
-      console.log('Please check the entry IDs above and manually delete if needed.');
+    if (scheduleAuditLogs.length === 0 && scheduleWateringEvents.length === 0) {
+      console.log('\nNo schedule data found. Nothing to clean up.');
       return;
     }
     
-    // Delete the entries and their associated watering events
-    for (const entry of matchingEntries) {
-      const details = entry.details as any;
-      console.log(`\nDeleting entry: ${entry.id}`);
-      console.log(`  Schedule: ${details.scheduleName || 'Unknown'}`);
-      console.log(`  Timestamp: ${entry.timestamp.toISOString()}`);
-      console.log(`  Zones:`, details.zones?.map((z: any) => `${z.zoneName} (${z.zoneId})`).join(', ') || 'None');
-      
-      // Get watering event IDs from the audit log entry
-      const wateringEventIds = details.wateringEventIds || [];
-      
-      // Delete the audit log entry
+    // Show summary of what will be deleted
+    if (scheduleAuditLogs.length > 0) {
+      console.log('\nSchedule audit logs to be deleted:');
+      scheduleAuditLogs.forEach(entry => {
+        const details = entry.details as any;
+        console.log(`  - ${details.scheduleName || 'Unknown'} at ${entry.timestamp.toISOString()}`);
+      });
+    }
+    
+    if (scheduleWateringEvents.length > 0) {
+      console.log(`\n${scheduleWateringEvents.length} watering event(s) to be deleted`);
+    }
+    
+    // Prompt for confirmation
+    console.log('\n⚠️  WARNING: This will delete ALL schedule-related data.');
+    console.log('After deletion, rachioPoll.ts will re-process events with the new simplified logic.');
+    console.log('\nType "yes" to confirm deletion, or anything else to cancel:');
+    
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    
+    const answer = await new Promise<string>((resolve) => {
+      rl.question('', (input: string) => {
+        resolve(input.trim().toLowerCase());
+      });
+    });
+    rl.close();
+    
+    if (answer !== 'yes') {
+      console.log('\nCancelled. No data was deleted.');
+      return;
+    }
+    
+    console.log('\nDeleting schedule data...');
+    
+    // Delete all schedule audit logs
+    let deletedAuditLogs = 0;
+    for (const entry of scheduleAuditLogs) {
       await prisma.auditLog.delete({
         where: { id: entry.id },
       });
-      console.log(`  ✓ Deleted audit log entry`);
-      
-      // Change the source of watering events from 'schedule' to 'manual'
-      // This prevents rachioPoll.ts from reprocessing them and recreating the audit log entry
-      if (wateringEventIds.length > 0) {
-        console.log(`  Found ${wateringEventIds.length} associated watering event(s)`);
-        const updatedCount = await prisma.wateringEvent.updateMany({
-          where: { 
-            id: { in: wateringEventIds },
-            source: 'schedule', // Only update events that are still marked as schedule
-          },
-          data: {
-            source: 'manual', // Change to manual so they won't be reprocessed
-          },
-        });
-        console.log(`  ✓ Changed ${updatedCount.count} watering event(s) source from 'schedule' to 'manual'`);
-      }
+      deletedAuditLogs++;
     }
     
-    console.log(`\n✓ Successfully removed ${matchingEntries.length} incorrect schedule entry/entries`);
+    // Delete all schedule watering events
+    const deletedWateringEvents = await prisma.wateringEvent.deleteMany({
+      where: {
+        source: 'schedule',
+      },
+    });
+    
+    console.log(`\n✓ Successfully deleted ${deletedAuditLogs} schedule audit log entry/entries`);
+    console.log(`✓ Successfully deleted ${deletedWateringEvents.count} schedule watering event(s)`);
+    console.log('\nSchedule data has been cleaned up. rachioPoll.ts will re-process events with the new logic.');
   } catch (error) {
     console.error('Error removing incorrect schedule entry:', error);
     process.exit(1);
