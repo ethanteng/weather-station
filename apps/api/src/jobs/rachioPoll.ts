@@ -268,7 +268,28 @@ export async function pollRachioData(): Promise<void> {
             },
           });
           
-          if (existingAutomationEvent || automationAuditLog) {
+          // Also check for run_zone audit log entries (automations create these when they run zones)
+          const automationRunZoneLog = await prisma.auditLog.findFirst({
+            where: {
+              action: 'run_zone',
+              source: 'automation',
+              timestamp: {
+                gte: timeWindowStart,
+                lte: timeWindowEnd,
+              },
+            },
+          });
+          
+          // Check if the run_zone log is for this specific zone
+          let isAutomationRunZone = false;
+          if (automationRunZoneLog) {
+            const runZoneDetails = automationRunZoneLog.details as any;
+            if (runZoneDetails?.zoneId === zoneId) {
+              isAutomationRunZone = true;
+            }
+          }
+          
+          if (existingAutomationEvent || automationAuditLog || isAutomationRunZone) {
             console.log(`  Skipping event - already exists as automation event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
             continue; // Don't store as schedule event if it's actually an automation
           }
@@ -356,6 +377,50 @@ export async function pollRachioData(): Promise<void> {
         // Skip if already logged
         if (loggedEventIds.has(event.id)) {
           console.log(`  Skipping event ${event.id} - already in audit log`);
+          continue;
+        }
+
+        // Check if this event is actually an automation event
+        // (it might have been incorrectly classified as schedule earlier)
+        const eventTimeWindowStart = new Date(event.timestamp.getTime() - 5 * 60 * 1000);
+        const eventTimeWindowEnd = new Date(event.timestamp.getTime() + 5 * 60 * 1000);
+        
+        const isAutomationEvent = await prisma.wateringEvent.findFirst({
+          where: {
+            zoneId: event.zoneId,
+            timestamp: {
+              gte: eventTimeWindowStart,
+              lte: eventTimeWindowEnd,
+            },
+            durationSec: {
+              gte: event.durationSec - 10,
+              lte: event.durationSec + 10,
+            },
+            source: 'automation',
+          },
+        });
+        
+        const isAutomationAuditLog = await prisma.auditLog.findFirst({
+          where: {
+            OR: [
+              {
+                action: 'automation_triggered',
+                source: 'automation',
+              },
+              {
+                action: 'run_zone',
+                source: 'automation',
+              },
+            ],
+            timestamp: {
+              gte: eventTimeWindowStart,
+              lte: eventTimeWindowEnd,
+            },
+          },
+        });
+        
+        if (isAutomationEvent || isAutomationAuditLog) {
+          console.log(`  Skipping event ${event.id} - appears to be an automation event, not a schedule`);
           continue;
         }
 

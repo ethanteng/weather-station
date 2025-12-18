@@ -121,15 +121,20 @@ async function removeIncorrectSchedule() {
       });
       console.log(`  ✓ Deleted audit log entry`);
       
-      // Optionally delete the watering events (they might be needed for other purposes)
-      // For now, we'll just update them to note they were incorrectly classified
+      // Change the source of watering events from 'schedule' to 'manual'
+      // This prevents rachioPoll.ts from reprocessing them and recreating the audit log entry
       if (wateringEventIds.length > 0) {
         console.log(`  Found ${wateringEventIds.length} associated watering event(s)`);
-        // We could delete them, but let's keep them for now and just remove the audit log
-        // If you want to delete them too, uncomment:
-        // await prisma.wateringEvent.deleteMany({
-        //   where: { id: { in: wateringEventIds } },
-        // });
+        const updatedCount = await prisma.wateringEvent.updateMany({
+          where: { 
+            id: { in: wateringEventIds },
+            source: 'schedule', // Only update events that are still marked as schedule
+          },
+          data: {
+            source: 'manual', // Change to manual so they won't be reprocessed
+          },
+        });
+        console.log(`  ✓ Changed ${updatedCount.count} watering event(s) source from 'schedule' to 'manual'`);
       }
     }
     
