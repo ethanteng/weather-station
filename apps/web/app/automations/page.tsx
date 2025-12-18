@@ -474,6 +474,7 @@ function RuleView({
   const [sensors, setSensors] = useState<SoilMoistureSensor[]>([]);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [isStartingSchedule, setIsStartingSchedule] = useState(false);
+  const [isInEffect, setIsInEffect] = useState<boolean | null>(null);
   const isRachioSchedule = rule.source === 'rachio';
 
   // Fetch sensors for displaying names
@@ -488,6 +489,26 @@ function RuleView({
     };
     fetchSensors();
   }, []);
+
+  // Check if rule is currently in effect (only for custom rules)
+  useEffect(() => {
+    if (isRachioSchedule || !rule.enabled) {
+      setIsInEffect(false);
+      return;
+    }
+
+    const checkStatus = async () => {
+      try {
+        const status = await automationApi.checkRuleStatus(rule.id);
+        setIsInEffect(status.inEffect);
+      } catch (error) {
+        console.error('Error checking rule status:', error);
+        setIsInEffect(false);
+      }
+    };
+
+    checkStatus();
+  }, [rule.id, rule.enabled, isRachioSchedule]);
 
   // Formatting helper functions
   const formatInterval = (interval?: number, scheduleJobTypes?: string[], summary?: string): string => {
@@ -899,6 +920,12 @@ function RuleView({
                   </>
                 )}
               </span>
+              {!isRachioSchedule && isInEffect === true && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  In Effect
+                </span>
+              )}
             </div>
           </div>
 

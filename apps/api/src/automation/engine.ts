@@ -264,7 +264,7 @@ function evaluateConditions(
  * Compares last watering date at day level (not hour/minute level)
  * Returns true if zone is still in cooldown, false otherwise
  */
-async function isZoneInCooldown(zoneId: string, cooldownDays: number): Promise<boolean> {
+export async function isZoneInCooldown(zoneId: string, cooldownDays: number): Promise<boolean> {
   if (cooldownDays <= 0) {
     return false; // No cooldown or invalid cooldown period
   }

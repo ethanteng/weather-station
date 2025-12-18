@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { evaluateRules } from '../automation/engine';
+import { evaluateRules, isZoneInCooldown } from '../automation/engine';
 import { RachioClient, RachioRateLimitError, getRachioRateLimitStatus } from '../clients/rachio';
 
 const router = Router();
@@ -714,6 +714,103 @@ router.post('/run', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('Error running automations:', error);
     return res.status(500).json({ error: 'Failed to run automations' });
+  }
+});
+
+/**
+ * GET /api/automations/:id/status
+ * Check if an automation rule is currently "in effect"
+ * Returns { inEffect: boolean } where inEffect is true if:
+ * - For set_rain_delay: rain delay hasn't expired yet
+ * - For run_zone: zones are still in cooldown period
+ */
+router.get('/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get the rule to check its action type
+    const rule = await prisma.automationRule.findUnique({
+      where: { id },
+    });
+
+    if (!rule) {
+      return res.status(404).json({ error: 'Automation rule not found' });
+    }
+
+    // Only check custom rules (Rachio schedules don't have this concept)
+    const actions = rule.actions as any;
+
+    // Check for set_rain_delay action
+    if (actions.type === 'set_rain_delay') {
+      // Find most recent set_rain_delay entries and filter for this rule
+      // We fetch multiple entries since Prisma doesn't easily filter JSON fields
+      const rainDelayEntries = await prisma.auditLog.findMany({
+        where: {
+          source: 'automation',
+          action: 'set_rain_delay',
+        },
+        orderBy: { timestamp: 'desc' },
+        take: 50, // Check last 50 entries to find one for this rule
+      });
+
+      // Find the most recent entry for this rule
+      for (const entry of rainDelayEntries) {
+        const details = entry.details as any;
+        if (details.ruleId === id) {
+          const hours = details.hours;
+          if (hours && typeof hours === 'number') {
+            const expirationTime = new Date(entry.timestamp.getTime() + hours * 3600 * 1000);
+            const inEffect = expirationTime > new Date();
+            return res.json({ inEffect });
+          }
+        }
+      }
+    }
+
+    // Check for run_zone action
+    if (actions.type === 'run_zone') {
+      // Find most recent automation_triggered entries and filter for this rule
+      // We fetch multiple entries since Prisma doesn't easily filter JSON fields
+      const automationEntries = await prisma.auditLog.findMany({
+        where: {
+          source: 'automation',
+          action: 'automation_triggered',
+        },
+        orderBy: { timestamp: 'desc' },
+        take: 50, // Check last 50 entries to find one for this rule
+      });
+
+      // Find the most recent entry for this rule
+      for (const entry of automationEntries) {
+        const details = entry.details as any;
+        if (details.ruleId === id && details.resultDetails) {
+          const zoneIds = details.resultDetails.zoneIds || [];
+          
+          // Check if any zone is still in cooldown
+          for (const zoneId of zoneIds) {
+            const zone = await prisma.rachioZone.findUnique({
+              where: { id: zoneId },
+              select: { cooldownPeriodDays: true },
+            });
+            
+            if (zone?.cooldownPeriodDays && zone.cooldownPeriodDays > 0) {
+              const inCooldown = await isZoneInCooldown(zoneId, zone.cooldownPeriodDays);
+              if (inCooldown) {
+                return res.json({ inEffect: true });
+              }
+            }
+          }
+          // If we found the entry but no zones are in cooldown, break to return false
+          break;
+        }
+      }
+    }
+
+    // No active action found
+    return res.json({ inEffect: false });
+  } catch (error) {
+    console.error('Error checking rule status:', error);
+    return res.status(500).json({ error: 'Failed to check rule status' });
   }
 });
 

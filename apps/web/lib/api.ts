@@ -497,6 +497,11 @@ export const automationApi = {
     const response = await api.get<AutomationHistoryResponse>('/api/automations/history', { params });
     return response.data;
   },
+
+  async checkRuleStatus(id: string): Promise<{ inEffect: boolean }> {
+    const response = await api.get<{ inEffect: boolean }>(`/api/automations/${id}/status`);
+    return response.data;
+  },
 };
 
 export const wateringApi = {
