@@ -65,6 +65,7 @@ async function removeIncorrectSchedule() {
     });
     
     // Find watering events with category: undefined or summary containing "Quick Run"
+    // Rachio events have fields like: id, category, type, subType, summary, eventDate
     const allWateringEvents = await prisma.wateringEvent.findMany({
       include: {
         zone: {
@@ -75,17 +76,38 @@ async function removeIncorrectSchedule() {
       },
     });
     
+    // Debug: Log sample of events to help diagnose
+    if (allWateringEvents.length > 0) {
+      console.log('\nDebug: Sample of watering events:');
+      const sampleEvents = allWateringEvents.slice(0, 10);
+      sampleEvents.forEach(event => {
+        const rawPayload = event.rawPayload as any;
+        const hasCategory = rawPayload && typeof rawPayload === 'object' && 'category' in rawPayload;
+        const categoryValue = hasCategory ? rawPayload.category : 'N/A';
+        const summaryPreview = rawPayload?.summary ? rawPayload.summary.substring(0, 50) : 'N/A';
+        console.log(`  - Source: ${event.source}, Zone: ${event.zone.name}, Has category field: ${hasCategory}, Category: ${categoryValue}, Summary: ${summaryPreview}`);
+      });
+    }
+    
     const invalidRachioEvents = allWateringEvents.filter(event => {
       const rawPayload = event.rawPayload as any;
       
-      // If rawPayload exists and looks like a Rachio event (has category field)
-      if (rawPayload && typeof rawPayload === 'object' && 'category' in rawPayload) {
-        // Exclude events with undefined category
-        if (rawPayload.category === undefined) {
+      // Check if this looks like a Rachio API event (has Rachio event structure)
+      // Rachio events typically have: id, category, type, subType, summary, eventDate
+      // We check for 'category' field specifically to match the API endpoint logic
+      const isRachioEvent = rawPayload && 
+        typeof rawPayload === 'object' && 
+        'category' in rawPayload;
+      
+      if (isRachioEvent) {
+        // Exclude events with undefined or null category (matches API endpoint filter)
+        // Note: category can be explicitly undefined, null, or the property might not exist
+        const categoryValue = rawPayload.category;
+        if (categoryValue === undefined || categoryValue === null) {
           return true;
         }
         
-        // Exclude events where summary includes "Quick Run"
+        // Exclude events where summary includes "Quick Run" (case-insensitive)
         if (rawPayload.summary && typeof rawPayload.summary === 'string') {
           if (rawPayload.summary.toLowerCase().includes('quick run')) {
             return true;
