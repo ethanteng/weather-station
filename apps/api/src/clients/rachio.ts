@@ -425,6 +425,28 @@ export class RachioClient {
   }
 
   /**
+   * Run multiple zones for specified durations
+   * 
+   * Important notes:
+   * - Zones run sequentially (one at a time), not simultaneously
+   * - Duration must be in seconds (e.g., 600 = 10 minutes)
+   * - sortOrder must be sequential (1, 2, 3, ...) for proper ordering
+   * 
+   * @param zoneRunDurations Array of zone run configurations with zoneId, duration (in seconds), and sortOrder
+   */
+  async runZones(zoneRunDurations: Array<{ zoneId: string; duration: number; sortOrder: number }>): Promise<void> {
+    try {
+      await this.client.put(`/zone/start_multiple`, zoneRunDurations);
+
+      const zoneIds = zoneRunDurations.map(z => z.zoneId).join(', ');
+      console.log(`Started multiple zones [${zoneIds}] sequentially`);
+    } catch (error) {
+      console.error(`Error running multiple zones:`, error);
+      throw new Error(`Failed to run zones: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Stop all watering on a device
    * @param deviceId Device ID
    */

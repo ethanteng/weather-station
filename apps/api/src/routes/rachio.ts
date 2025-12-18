@@ -336,13 +336,14 @@ router.post('/stop', async (req: Request, res: Response) => {
  * GET /api/rachio/watering-events
  * Get recent watering events
  * Query params: limit (default 10)
+ * Filters out events with category: undefined or summary containing "Quick Run"
  */
 router.get('/watering-events', async (_req: Request, res: Response) => {
   try {
     const limit = parseInt(_req.query.limit as string) || 10;
 
     const events = await prisma.wateringEvent.findMany({
-      take: limit,
+      take: limit * 2, // Fetch more to account for filtering
       orderBy: {
         timestamp: 'desc',
       },
@@ -362,7 +363,31 @@ router.get('/watering-events', async (_req: Request, res: Response) => {
       },
     });
 
-    return res.json(events.map(event => ({
+    // Filter out Rachio events with category: undefined or summary containing "Quick Run"
+    // Only filter events that have rawPayload (Rachio API events), not manual/automation events
+    const filteredEvents = events.filter(event => {
+      const rawPayload = event.rawPayload as any;
+      
+      // If rawPayload exists and looks like a Rachio event (has category field)
+      if (rawPayload && typeof rawPayload === 'object' && 'category' in rawPayload) {
+        // Exclude events with undefined category
+        if (rawPayload.category === undefined) {
+          return false;
+        }
+        
+        // Exclude events where summary includes "Quick Run"
+        if (rawPayload.summary && typeof rawPayload.summary === 'string') {
+          if (rawPayload.summary.toLowerCase().includes('quick run')) {
+            return false;
+          }
+        }
+      }
+      
+      // Include all other events (manual, automation, or Rachio events that pass the filter)
+      return true;
+    }).slice(0, limit); // Take only the requested limit after filtering
+
+    return res.json(filteredEvents.map(event => ({
       id: event.id,
       timestamp: event.timestamp,
       zoneId: event.zoneId,

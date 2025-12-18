@@ -447,7 +447,9 @@ async function executeAction(
     const failedZoneIds: string[] = [];
     const skippedZoneIds: string[] = [];
 
-    // Run each zone
+    // First, check cooldown periods for all zones and separate them
+    const zonesToRun: Array<{ zoneId: string; zoneName: string }> = [];
+    
     for (const zoneId of zoneIds) {
       // Fetch zone's cooldown period from database
       const zone = await prisma.rachioZone.findUnique({
@@ -465,15 +467,109 @@ async function executeAction(
         }
       }
 
+      zonesToRun.push({
+        zoneId,
+        zoneName: zone?.name || zoneId,
+      });
+    }
+
+    if (zonesToRun.length === 0) {
+      console.log('All zones are in cooldown period, skipping run_zone action');
+      return {
+        triggered: true,
+        action: `run_zone_${actions.minutes}min`,
+        details: {
+          minutes: actions.minutes,
+          zoneIds: [],
+          failedZoneIds: [],
+          skippedZoneIds,
+          durationSec,
+          soilMoisture: weather.soilMoisture,
+          rain24h: weather.rain24h,
+          zones: [],
+        },
+      };
+    }
+
+    // Get latest weather reading for complete weather stats (fetch once for all zones)
+    const latestWeather = await prisma.weatherReading.findFirst({
+      orderBy: { timestamp: 'desc' },
+    });
+
+    // Use /start_multiple endpoint if there are multiple zones, otherwise use /start
+    // Note: Zones run sequentially (one at a time), not simultaneously
+    if (zonesToRun.length > 1) {
+      try {
+        // Prepare zone run durations with sequential sortOrder (1, 2, 3, ...)
+        // Duration is already in seconds (durationSec = minutes * 60)
+        const zoneRunDurations = zonesToRun.map((zone, index) => ({
+          zoneId: zone.zoneId,
+          duration: durationSec, // Duration in seconds
+          sortOrder: index + 1, // Sequential order: 1, 2, 3, ...
+        }));
+
+        await rachioClient.runZones(zoneRunDurations);
+
+        // Get zone and device info for audit logs
+        const zoneInfos = await prisma.rachioZone.findMany({
+          where: { id: { in: zonesToRun.map(z => z.zoneId) } },
+          select: { id: true, name: true, device: { select: { id: true, name: true } } },
+        });
+
+        // Create watering events and audit logs for each zone
+        for (const zoneInfo of zoneInfos) {
+          await prisma.wateringEvent.create({
+            data: {
+              zoneId: zoneInfo.id,
+              durationSec,
+              source: 'automation',
+              rawPayload: {
+                soilMoisture: weather.soilMoisture,
+                rain24h: weather.rain24h,
+                ruleId: ruleId || null,
+                ruleName: ruleName || null,
+              },
+            },
+          });
+
+          await prisma.auditLog.create({
+            data: {
+              action: 'run_zone',
+              details: {
+                zoneId: zoneInfo.id,
+                zoneName: zoneInfo.name || null,
+                deviceId: zoneInfo.device?.id || null,
+                deviceName: zoneInfo.device?.name || null,
+                durationSec,
+                minutes: Math.round(durationSec / 60),
+                ruleId: ruleId || null,
+                ruleName: ruleName || null,
+                completed: true,
+                temperature: latestWeather?.temperature ?? null,
+                humidity: latestWeather?.humidity ?? null,
+                pressure: latestWeather?.pressure ?? null,
+                rain24h: latestWeather?.rain24h ?? null,
+                rain1h: latestWeather?.rain1h ?? null,
+                soilMoisture: latestWeather?.soilMoisture ?? null,
+                soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
+              },
+              source: 'automation',
+            },
+          });
+        }
+
+        successfulZoneIds.push(...zonesToRun.map(z => z.zoneId));
+      } catch (error) {
+        console.error(`Error running multiple zones:`, error);
+        failedZoneIds.push(...zonesToRun.map(z => z.zoneId));
+      }
+    } else {
+      // Single zone - use the original /start endpoint
+      const zoneId = zonesToRun[0].zoneId;
       try {
         await rachioClient.runZone(zoneId, durationSec);
 
-        // Get latest weather reading for complete weather stats
-        const latestWeather = await prisma.weatherReading.findFirst({
-          orderBy: { timestamp: 'desc' },
-        });
-
-        // Get zone and device info for audit log (fetch again since we may have already fetched it above)
+        // Get zone and device info for audit log
         const zoneInfo = await prisma.rachioZone.findUnique({
           where: { id: zoneId },
           select: { name: true, device: { select: { id: true, name: true } } },
