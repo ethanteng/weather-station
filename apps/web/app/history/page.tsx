@@ -74,8 +74,16 @@ export default function HistoryPage() {
           if (entry.type !== 'automation' || isUpload) {
             return false;
           }
-        } else if (entry.type !== filterType) {
-          return false;
+        } else if (filterType === 'schedule') {
+          // Filter for schedules only - explicitly check for schedule type
+          if (entry.type !== 'schedule') {
+            return false;
+          }
+        } else {
+          // Fallback for any other filter types
+          if (entry.type !== filterType) {
+            return false;
+          }
         }
       }
       // Search filter
