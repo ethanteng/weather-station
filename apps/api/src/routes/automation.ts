@@ -843,12 +843,35 @@ router.get('/history', async (req: Request, res: Response) => {
     }
 
     // Apply pagination to the merged and sorted results (only once, here)
-    const paginatedEntries = allHistoryEntries.slice(offset, offset + limit);
+    let paginatedEntries = allHistoryEntries.slice(offset, offset + limit);
     console.log(`[History API] After pagination (offset=${offset}, limit=${limit}): ${paginatedEntries.length} entries`);
     
-    // Log how many schedule entries are in the paginated results
+    // Find all schedule entries in the fetched set
+    const allScheduleEntriesInFetched = allHistoryEntries.filter(e => e.type === 'schedule');
     const scheduleEntriesInPage = paginatedEntries.filter(e => e.type === 'schedule').length;
-    console.log(`[History API] Schedule entries in paginated results: ${scheduleEntriesInPage}`);
+    
+    // If we're on the first page (offset=0) and there are schedule entries beyond the page,
+    // include them to ensure schedule entries are visible
+    if (offset === 0 && allScheduleEntriesInFetched.length > scheduleEntriesInPage) {
+      const scheduleEntriesBeyondPage = allScheduleEntriesInFetched.filter(
+        scheduleEntry => !paginatedEntries.some(e => e.id === scheduleEntry.id)
+      );
+      if (scheduleEntriesBeyondPage.length > 0) {
+        console.log(`[History API] Found ${scheduleEntriesBeyondPage.length} schedule entries beyond first page, including them`);
+        // Merge schedule entries into paginated results, maintaining sort order
+        const allEntriesWithSchedules = [...paginatedEntries, ...scheduleEntriesBeyondPage];
+        allEntriesWithSchedules.sort((a, b) => {
+          const timeA = new Date(a.timestamp).getTime();
+          const timeB = new Date(b.timestamp).getTime();
+          return timeB - timeA; // Descending order (newest first)
+        });
+        paginatedEntries = allEntriesWithSchedules;
+      }
+    }
+    
+    // Log how many schedule entries are in the paginated results
+    const finalScheduleEntriesInPage = paginatedEntries.filter(e => e.type === 'schedule').length;
+    console.log(`[History API] Schedule entries in paginated results: ${finalScheduleEntriesInPage}`);
 
     // Calculate accurate total count
     // Count the actual schedule runs we created from fetched unlogged events
