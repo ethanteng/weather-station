@@ -683,7 +683,6 @@ router.get('/history', async (req: Request, res: Response) => {
 
     // Transform audit logs to history entries
     const auditHistoryEntries = filteredAuditLogs.map((log) => {
-      const isSchedule = log.source === 'rachio_schedule';
       const details = log.details as any;
       
       // Determine type and extract relevant information
