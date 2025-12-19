@@ -583,9 +583,40 @@ export default function Dashboard() {
                   The following rain delay{activeAutomations.length > 1 ? 's are' : ' is'} currently in effect:
                 </p>
                 <ul className="list-disc list-inside text-blue-700 text-sm mb-2 space-y-1">
-                  {activeAutomations.map((automation) => (
-                    <li key={automation.id}>{automation.name}</li>
-                  ))}
+                  {activeAutomations.map((automation) => {
+                    // Format duration
+                    let durationText = '';
+                    if (automation.actions.hours) {
+                      durationText = `${automation.actions.hours} hour${automation.actions.hours !== 1 ? 's' : ''}`;
+                      if (automation.actions.minutes) {
+                        durationText += ` ${automation.actions.minutes} minute${automation.actions.minutes !== 1 ? 's' : ''}`;
+                      }
+                    } else if (automation.actions.minutes) {
+                      durationText = `${automation.actions.minutes} minute${automation.actions.minutes !== 1 ? 's' : ''}`;
+                    }
+
+                    // Get device names
+                    let deviceInfo = '';
+                    if (automation.actions.deviceIds && automation.actions.deviceIds.length > 0) {
+                      const selectedDevices = devices.filter(device => 
+                        automation.actions.deviceIds?.includes(device.id)
+                      );
+                      if (selectedDevices.length > 0) {
+                        deviceInfo = ` - ${selectedDevices.map(d => d.name).join(', ')}`;
+                      } else {
+                        deviceInfo = ` - ${automation.actions.deviceIds.length} device(s)`;
+                      }
+                    } else {
+                      // No deviceIds means it applies to all devices
+                      deviceInfo = ' - All devices';
+                    }
+
+                    return (
+                      <li key={automation.id}>
+                        Set Rain Delay: {durationText}{deviceInfo}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <Link
                   href="/automations"
