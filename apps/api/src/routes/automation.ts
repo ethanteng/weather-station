@@ -251,6 +251,8 @@ router.get('/history', async (req: Request, res: Response) => {
       }
     });
 
+    console.log(`[History API] Found ${loggedWateringEventIds.size} already-logged watering event IDs`);
+
     // Fetch schedule watering events that aren't logged yet
     // Look back further than 24 hours to catch older events
     const thirtyDaysAgo = new Date();
@@ -268,6 +270,8 @@ router.get('/history', async (req: Request, res: Response) => {
         },
       },
     });
+    
+    console.log(`[History API] Found ${unloggedScheduleEventsTotal} unlogged schedule watering events (last 30 days)`);
     
     // Fetch unlogged schedule events - fetch enough to cover pagination after grouping
     // We fetch offset + limit * 3 to ensure we have enough after grouping into schedule runs
@@ -303,6 +307,8 @@ router.get('/history', async (req: Request, res: Response) => {
       skip: 0, // Don't apply offset here - we'll apply it after merging
     });
 
+    console.log(`[History API] Fetched ${unloggedScheduleEvents.length} unlogged schedule events for processing`);
+
     // Group unlogged schedule events by time window (5 minutes) and device
     const scheduleRunsFromEvents = new Map<string, typeof unloggedScheduleEvents>();
     for (const event of unloggedScheduleEvents) {
@@ -315,6 +321,8 @@ router.get('/history', async (req: Request, res: Response) => {
       }
       scheduleRunsFromEvents.get(key)!.push(event);
     }
+
+    console.log(`[History API] Grouped into ${scheduleRunsFromEvents.size} schedule run(s) from ${unloggedScheduleEvents.length} events`);
 
     // Collect all IDs that need enrichment (for batch queries)
     const zoneIdsToFetch = new Set<string>();
@@ -429,9 +437,12 @@ router.get('/history', async (req: Request, res: Response) => {
     });
 
     // Create audit log entries for unlogged schedule events and convert to history entries
+    console.log(`[History API] Creating audit log entries for ${scheduleRunsFromEvents.size} schedule run(s)`);
     const scheduleHistoryEntries = await Promise.all(
-      Array.from(scheduleRunsFromEvents.values()).map(async (events) => {
+      Array.from(scheduleRunsFromEvents.values()).map(async (events, index) => {
         if (events.length === 0) return null;
+        
+        try {
 
         // Check if an audit log entry already exists for these watering event IDs
         // (in case another request created it concurrently)
@@ -445,7 +456,10 @@ router.get('/history', async (req: Request, res: Response) => {
         const timeWindowStart = new Date(startTime.getTime() - 5 * 60 * 1000);
         const timeWindowEnd = new Date(startTime.getTime() + 5 * 60 * 1000);
         
-        const existingAuditLog = deviceId ? await prisma.auditLog.findFirst({
+        // Check if an audit log entry already exists for this time window and device
+        // We fetch all schedule audit logs in the time window and check deviceId in application code
+        // because Prisma JSON queries can be tricky with PostgreSQL
+        const existingAuditLog = deviceId ? (await prisma.auditLog.findMany({
           where: {
             source: 'rachio_schedule',
             action: 'rachio_schedule_ran',
@@ -453,11 +467,11 @@ router.get('/history', async (req: Request, res: Response) => {
               gte: timeWindowStart,
               lte: timeWindowEnd,
             },
-            details: {
-              path: ['deviceId'],
-              equals: deviceId,
-            },
           },
+          take: 10, // Limit to reasonable number
+        })).find(log => {
+          const details = log.details as any;
+          return details?.deviceId === deviceId;
         }) : null;
 
         // If audit log already exists, convert it to history entry format
@@ -608,11 +622,16 @@ router.get('/history', async (req: Request, res: Response) => {
             totalDurationMinutes: Math.round(totalDurationSec / 60),
           },
         };
+        } catch (error) {
+          console.error(`[History API] Error processing schedule run ${index + 1}/${scheduleRunsFromEvents.size}:`, error);
+          return null;
+        }
       })
     );
     
     // Filter out null entries
     const validScheduleEntries = scheduleHistoryEntries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    console.log(`[History API] Successfully created ${validScheduleEntries.length} schedule history entries`);
 
     // Transform audit logs to history entries
     const auditHistoryEntries = filteredAuditLogs.map((log) => {
@@ -743,6 +762,7 @@ router.get('/history', async (req: Request, res: Response) => {
 
     // Merge audit log entries and schedule event entries, then sort by timestamp
     const allHistoryEntries = [...auditHistoryEntries, ...validScheduleEntries];
+    console.log(`[History API] Merged ${auditHistoryEntries.length} audit log entries + ${validScheduleEntries.length} schedule entries = ${allHistoryEntries.length} total entries`);
     allHistoryEntries.sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime();
       const timeB = new Date(b.timestamp).getTime();
@@ -751,6 +771,11 @@ router.get('/history', async (req: Request, res: Response) => {
 
     // Apply pagination to the merged and sorted results (only once, here)
     const paginatedEntries = allHistoryEntries.slice(offset, offset + limit);
+    console.log(`[History API] After pagination (offset=${offset}, limit=${limit}): ${paginatedEntries.length} entries`);
+    
+    // Log how many schedule entries are in the paginated results
+    const scheduleEntriesInPage = paginatedEntries.filter(e => e.type === 'schedule').length;
+    console.log(`[History API] Schedule entries in paginated results: ${scheduleEntriesInPage}`);
 
     // Calculate accurate total count
     // Count the actual schedule runs we created from fetched unlogged events
