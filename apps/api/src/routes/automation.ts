@@ -431,6 +431,25 @@ router.get('/history', async (req: Request, res: Response) => {
       }
     });
     
+    // Count schedule audit logs in the fetched set
+    const scheduleAuditLogsInFetched = auditLogs.filter(log => 
+      log.source === 'rachio_schedule' && log.action === 'rachio_schedule_ran'
+    );
+    console.log(`[History API] Found ${scheduleAuditLogsInFetched.length} schedule audit logs in fetched audit logs (out of ${auditLogs.length} total)`);
+    
+    // Log source distribution
+    const sourceCounts = auditLogs.reduce((acc, log) => {
+      acc[log.source] = (acc[log.source] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`[History API] Audit log source distribution:`, sourceCounts);
+    
+    // Log action distribution for rachio_schedule source
+    const scheduleActions = auditLogs
+      .filter(log => log.source === 'rachio_schedule')
+      .map(log => log.action);
+    console.log(`[History API] Schedule audit log actions:`, scheduleActions);
+    
     // Filter out individual action entries that have a corresponding automation_triggered entry
     const filteredAuditLogs = auditLogs.filter(log => {
       // Keep automation_triggered entries
@@ -664,6 +683,7 @@ router.get('/history', async (req: Request, res: Response) => {
 
     // Transform audit logs to history entries
     const auditHistoryEntries = filteredAuditLogs.map((log) => {
+      const isSchedule = log.source === 'rachio_schedule';
       const details = log.details as any;
       
       // Determine type and extract relevant information
@@ -789,6 +809,10 @@ router.get('/history', async (req: Request, res: Response) => {
       };
     });
 
+    // Count schedule entries in auditHistoryEntries
+    const scheduleEntriesFromAuditLogs = auditHistoryEntries.filter(e => e.type === 'schedule').length;
+    console.log(`[History API] Schedule entries from audit logs: ${scheduleEntriesFromAuditLogs}`);
+    
     // Merge audit log entries and schedule event entries, then sort by timestamp
     const allHistoryEntries = [...auditHistoryEntries, ...validScheduleEntries];
     console.log(`[History API] Merged ${auditHistoryEntries.length} audit log entries + ${validScheduleEntries.length} schedule entries = ${allHistoryEntries.length} total entries`);
