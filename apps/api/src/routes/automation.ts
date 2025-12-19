@@ -240,35 +240,72 @@ router.get('/history', async (req: Request, res: Response) => {
     });
 
     // Also fetch schedule watering events that don't have audit log entries
-    // Get all watering event IDs that are already logged in audit logs
+    // Get ALL watering event IDs that are already logged in audit logs (not just the paginated ones)
+    // This ensures we don't mark events as "unlogged" just because their audit log is on a different page
+    const allScheduleAuditLogs = await prisma.auditLog.findMany({
+      where: {
+        source: 'rachio_schedule',
+        action: 'rachio_schedule_ran',
+      },
+      select: {
+        details: true,
+      },
+    });
+    
     const loggedWateringEventIds = new Set<string>();
-    auditLogs.forEach(log => {
-      if (log.source === 'rachio_schedule' && log.action === 'rachio_schedule_ran') {
-        const details = log.details as any;
-        if (details.wateringEventIds && Array.isArray(details.wateringEventIds)) {
-          details.wateringEventIds.forEach((id: string) => loggedWateringEventIds.add(id));
-        }
+    allScheduleAuditLogs.forEach(log => {
+      const details = log.details as any;
+      if (details.wateringEventIds && Array.isArray(details.wateringEventIds)) {
+        details.wateringEventIds.forEach((id: string) => loggedWateringEventIds.add(id));
       }
     });
 
-    console.log(`[History API] Found ${loggedWateringEventIds.size} already-logged watering event IDs`);
+    console.log(`[History API] Found ${loggedWateringEventIds.size} already-logged watering event IDs (from ${allScheduleAuditLogs.length} schedule audit logs)`);
+    if (loggedWateringEventIds.size > 0) {
+      console.log(`[History API] Logged watering event IDs:`, Array.from(loggedWateringEventIds).slice(0, 10));
+    }
 
     // Fetch schedule watering events that aren't logged yet
     // Look back further than 24 hours to catch older events
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    // Count total unlogged schedule events for accurate pagination total
-    const unloggedScheduleEventsTotal = await prisma.wateringEvent.count({
+    // First, check total schedule events (without filtering by logged status)
+    // Check both with and without date filter to understand the data
+    const totalScheduleEventsAllTime = await prisma.wateringEvent.count({
       where: {
         source: 'schedule',
-        id: {
-          notIn: Array.from(loggedWateringEventIds),
-        },
+      },
+    });
+    const totalScheduleEvents = await prisma.wateringEvent.count({
+      where: {
+        source: 'schedule',
         timestamp: {
           gte: thirtyDaysAgo,
         },
       },
+    });
+    console.log(`[History API] Total schedule watering events (all time): ${totalScheduleEventsAllTime}`);
+    console.log(`[History API] Total schedule watering events (last 30 days): ${totalScheduleEvents}`);
+    
+    // Build the where clause - handle empty array case for notIn
+    const unloggedWhereClause: any = {
+      source: 'schedule',
+      timestamp: {
+        gte: thirtyDaysAgo,
+      },
+    };
+    
+    // Only add notIn filter if we have logged IDs to exclude
+    if (loggedWateringEventIds.size > 0) {
+      unloggedWhereClause.id = {
+        notIn: Array.from(loggedWateringEventIds),
+      };
+    }
+    
+    // Count total unlogged schedule events for accurate pagination total
+    const unloggedScheduleEventsTotal = await prisma.wateringEvent.count({
+      where: unloggedWhereClause,
     });
     
     console.log(`[History API] Found ${unloggedScheduleEventsTotal} unlogged schedule watering events (last 30 days)`);
@@ -276,15 +313,7 @@ router.get('/history', async (req: Request, res: Response) => {
     // Fetch unlogged schedule events - fetch enough to cover pagination after grouping
     // We fetch offset + limit * 3 to ensure we have enough after grouping into schedule runs
     const unloggedScheduleEvents = await prisma.wateringEvent.findMany({
-      where: {
-        source: 'schedule',
-        id: {
-          notIn: Array.from(loggedWateringEventIds),
-        },
-        timestamp: {
-          gte: thirtyDaysAgo,
-        },
-      },
+      where: unloggedWhereClause,
       include: {
         zone: {
           select: {
