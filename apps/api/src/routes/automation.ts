@@ -809,8 +809,20 @@ router.get('/history', async (req: Request, res: Response) => {
     });
 
     // Count schedule entries in auditHistoryEntries
-    const scheduleEntriesFromAuditLogs = auditHistoryEntries.filter(e => e.type === 'schedule').length;
-    console.log(`[History API] Schedule entries from audit logs: ${scheduleEntriesFromAuditLogs}`);
+    const scheduleEntriesFromAuditLogs = auditHistoryEntries.filter(e => e.type === 'schedule');
+    console.log(`[History API] Schedule entries from audit logs: ${scheduleEntriesFromAuditLogs.length}`);
+    
+    // Log details about schedule entries
+    if (scheduleEntriesFromAuditLogs.length > 0) {
+      const scheduleTimestamps = scheduleEntriesFromAuditLogs.map(e => e.timestamp);
+      console.log(`[History API] Schedule entry timestamps:`, scheduleTimestamps);
+      console.log(`[History API] Schedule entry details:`, scheduleEntriesFromAuditLogs.map(e => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        name: e.name,
+        type: e.type
+      })));
+    }
     
     // Merge audit log entries and schedule event entries, then sort by timestamp
     const allHistoryEntries = [...auditHistoryEntries, ...validScheduleEntries];
@@ -820,6 +832,15 @@ router.get('/history', async (req: Request, res: Response) => {
       const timeB = new Date(b.timestamp).getTime();
       return timeB - timeA; // Descending order (newest first)
     });
+
+    // Log positions of schedule entries in sorted list
+    const scheduleEntryPositions = allHistoryEntries
+      .map((e, idx) => ({ entry: e, position: idx }))
+      .filter(({ entry }) => entry.type === 'schedule')
+      .map(({ entry, position }) => ({ id: entry.id, position, timestamp: entry.timestamp }));
+    if (scheduleEntryPositions.length > 0) {
+      console.log(`[History API] Schedule entries positions in sorted list:`, scheduleEntryPositions);
+    }
 
     // Apply pagination to the merged and sorted results (only once, here)
     const paginatedEntries = allHistoryEntries.slice(offset, offset + limit);
