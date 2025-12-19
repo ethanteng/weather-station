@@ -754,7 +754,6 @@ router.get('/history', async (req: Request, res: Response) => {
 
     // Calculate accurate total count
     // Count the actual schedule runs we created from fetched unlogged events
-    const scheduleRunsCount = scheduleRunsFromEvents.size;
     const newlyCreatedAuditLogsCount = validScheduleEntries.length;
     
     // Estimate total unlogged schedule runs (including ones we just created audit logs for):
