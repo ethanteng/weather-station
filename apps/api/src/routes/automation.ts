@@ -171,8 +171,8 @@ router.get('/history', async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    // Get total count of matching records for pagination
-    const total = await prisma.auditLog.count({
+    // Get total count of matching audit log records for pagination
+    const auditLogTotal = await prisma.auditLog.count({
       where: {
         OR: [
           {
@@ -202,6 +202,8 @@ router.get('/history', async (req: Request, res: Response) => {
     });
 
     // Query audit log for automation and schedule runs
+    // Fetch enough records to account for merging with schedule events and pagination
+    // We fetch offset + limit * 2 to ensure we have enough after merging
     const auditLogs = await prisma.auditLog.findMany({
       where: {
         OR: [
@@ -232,9 +234,87 @@ router.get('/history', async (req: Request, res: Response) => {
       orderBy: {
         timestamp: 'desc',
       },
-      take: limit,
-      skip: offset,
+      // Fetch enough to cover offset + limit after merging with schedule events
+      take: offset + limit * 3,
+      skip: 0, // Don't apply offset here - we'll apply it after merging
     });
+
+    // Also fetch schedule watering events that don't have audit log entries
+    // Get all watering event IDs that are already logged in audit logs
+    const loggedWateringEventIds = new Set<string>();
+    auditLogs.forEach(log => {
+      if (log.source === 'rachio_schedule' && log.action === 'rachio_schedule_ran') {
+        const details = log.details as any;
+        if (details.wateringEventIds && Array.isArray(details.wateringEventIds)) {
+          details.wateringEventIds.forEach((id: string) => loggedWateringEventIds.add(id));
+        }
+      }
+    });
+
+    // Fetch schedule watering events that aren't logged yet
+    // Look back further than 24 hours to catch older events
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Count total unlogged schedule events for accurate pagination total
+    const unloggedScheduleEventsTotal = await prisma.wateringEvent.count({
+      where: {
+        source: 'schedule',
+        id: {
+          notIn: Array.from(loggedWateringEventIds),
+        },
+        timestamp: {
+          gte: thirtyDaysAgo,
+        },
+      },
+    });
+    
+    // Fetch unlogged schedule events - fetch enough to cover pagination after grouping
+    // We fetch offset + limit * 3 to ensure we have enough after grouping into schedule runs
+    const unloggedScheduleEvents = await prisma.wateringEvent.findMany({
+      where: {
+        source: 'schedule',
+        id: {
+          notIn: Array.from(loggedWateringEventIds),
+        },
+        timestamp: {
+          gte: thirtyDaysAgo,
+        },
+      },
+      include: {
+        zone: {
+          select: {
+            id: true,
+            name: true,
+            device: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+      // Fetch enough to cover offset + limit after grouping into schedule runs
+      take: offset + limit * 3,
+      skip: 0, // Don't apply offset here - we'll apply it after merging
+    });
+
+    // Group unlogged schedule events by time window (5 minutes) and device
+    const scheduleRunsFromEvents = new Map<string, typeof unloggedScheduleEvents>();
+    for (const event of unloggedScheduleEvents) {
+      const timeWindow = Math.floor(event.timestamp.getTime() / (5 * 60 * 1000));
+      const deviceId = event.zone.device?.id || 'unknown';
+      const key = `${timeWindow}_${deviceId}`;
+      
+      if (!scheduleRunsFromEvents.has(key)) {
+        scheduleRunsFromEvents.set(key, []);
+      }
+      scheduleRunsFromEvents.get(key)!.push(event);
+    }
 
     // Collect all IDs that need enrichment (for batch queries)
     const zoneIdsToFetch = new Set<string>();
@@ -343,8 +423,199 @@ router.get('/history', async (req: Request, res: Response) => {
       return true; // Keep other entries
     });
     
+    // Get latest weather reading for schedule events that don't have weather stats
+    const latestWeather = await prisma.weatherReading.findFirst({
+      orderBy: { timestamp: 'desc' },
+    });
+
+    // Create audit log entries for unlogged schedule events and convert to history entries
+    const scheduleHistoryEntries = await Promise.all(
+      Array.from(scheduleRunsFromEvents.values()).map(async (events) => {
+        if (events.length === 0) return null;
+
+        // Check if an audit log entry already exists for these watering event IDs
+        // (in case another request created it concurrently)
+        // We check by looking for entries with the same device and timestamp (within 5 minutes)
+        const startTime = events.reduce((earliest, event) => 
+          event.timestamp < earliest ? event.timestamp : earliest, events[0].timestamp
+        );
+        const firstEvent = events[0];
+        const deviceId = firstEvent.zone.device?.id || null;
+        
+        const timeWindowStart = new Date(startTime.getTime() - 5 * 60 * 1000);
+        const timeWindowEnd = new Date(startTime.getTime() + 5 * 60 * 1000);
+        
+        const existingAuditLog = deviceId ? await prisma.auditLog.findFirst({
+          where: {
+            source: 'rachio_schedule',
+            action: 'rachio_schedule_ran',
+            timestamp: {
+              gte: timeWindowStart,
+              lte: timeWindowEnd,
+            },
+            details: {
+              path: ['deviceId'],
+              equals: deviceId,
+            },
+          },
+        }) : null;
+
+        // If audit log already exists, convert it to history entry format
+        if (existingAuditLog) {
+          const details = existingAuditLog.details as any;
+          return {
+            id: existingAuditLog.id,
+            timestamp: existingAuditLog.timestamp.toISOString(),
+            type: 'schedule' as const,
+            action: existingAuditLog.action,
+            name: details.scheduleName || 'Schedule',
+            ruleId: null,
+            scheduleId: details.scheduleId || null,
+            deviceId: details.deviceId || null,
+            deviceName: details.deviceName || null,
+            completed: details.completed ?? true,
+            temperature: details.temperature ?? null,
+            humidity: details.humidity ?? null,
+            pressure: details.pressure ?? null,
+            rain24h: details.rain24h ?? null,
+            rain1h: details.rain1h ?? null,
+            soilMoisture: details.soilMoisture ?? null,
+            soilMoistureValues: details.soilMoistureValues ?? null,
+            actionDetails: {
+              zones: details.zones || [],
+              startTime: details.startTime || null,
+              finishTime: details.finishTime || null,
+              totalDurationSec: details.totalDurationSec || null,
+              totalDurationMinutes: details.totalDurationMinutes || null,
+            },
+          };
+        }
+
+        // Calculate start and finish times (if not already calculated above)
+        const totalDurationSec = events.reduce((sum, event) => sum + event.durationSec, 0);
+        const finishTime = new Date(startTime.getTime() + totalDurationSec * 1000);
+
+        // Get device info from first event (if not already retrieved above)
+        const deviceName = firstEvent.zone.device?.name || null;
+
+        // Try to identify which schedule ran by matching zones
+        let scheduleName = 'Unknown Schedule';
+        let scheduleId: string | null = null;
+        
+        if (deviceId) {
+          try {
+            const apiKey = process.env.RACHIO_API_KEY;
+            if (apiKey) {
+              const rachioClient = new RachioClient(apiKey);
+              const schedules = await rachioClient.getSchedules(deviceId);
+              // Match zones from events to schedule zones
+              const eventZoneIds = new Set(events.map(e => e.zoneId));
+              
+              for (const schedule of schedules) {
+                const scheduleZoneIds = new Set(schedule.zones.map(z => z.zoneId));
+                // Check if all event zones match schedule zones (or if schedule zones match event zones)
+                const matches = Array.from(eventZoneIds).every(id => scheduleZoneIds.has(id)) ||
+                              Array.from(scheduleZoneIds).every(id => eventZoneIds.has(id));
+                
+                if (matches) {
+                  scheduleName = schedule.name;
+                  scheduleId = schedule.id;
+                  break;
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(`Could not fetch schedules for device ${deviceId} to identify schedule name:`, error);
+            // Fallback: Create a schedule name from zones
+            const zoneNames = events.map(e => e.zone.name).filter(Boolean);
+            scheduleName = zoneNames.length > 0 
+              ? `${zoneNames.length > 1 ? `${zoneNames.length} Zones` : zoneNames[0]} Schedule`
+              : 'Schedule';
+          }
+        } else {
+          // Fallback: Create a schedule name from zones
+          const zoneNames = events.map(e => e.zone.name).filter(Boolean);
+          scheduleName = zoneNames.length > 0 
+            ? `${zoneNames.length > 1 ? `${zoneNames.length} Zones` : zoneNames[0]} Schedule`
+            : 'Schedule';
+        }
+
+        // Create audit log entry for this schedule run
+        const auditLog = await prisma.auditLog.create({
+          data: {
+            action: 'rachio_schedule_ran',
+            details: {
+              scheduleId: scheduleId,
+              scheduleName: scheduleName,
+              deviceId: deviceId,
+              deviceName: deviceName,
+              zones: events.map(e => ({
+                zoneId: e.zoneId,
+                zoneName: e.zone.name,
+                durationSec: e.durationSec,
+                durationMinutes: Math.round(e.durationSec / 60),
+              })),
+              startTime: startTime.toISOString(),
+              finishTime: finishTime.toISOString(),
+              totalDurationSec: totalDurationSec,
+              totalDurationMinutes: Math.round(totalDurationSec / 60),
+              wateringEventIds: events.map(e => e.id),
+              completed: true,
+              temperature: latestWeather?.temperature ?? null,
+              humidity: latestWeather?.humidity ?? null,
+              pressure: latestWeather?.pressure ?? null,
+              rain24h: latestWeather?.rain24h ?? null,
+              rain1h: latestWeather?.rain1h ?? null,
+              soilMoisture: latestWeather?.soilMoisture ?? null,
+              soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
+            },
+            source: 'rachio_schedule',
+            timestamp: startTime, // Use start time as the timestamp
+          },
+        });
+
+        // Convert to history entry format
+        return {
+          id: auditLog.id,
+          timestamp: auditLog.timestamp.toISOString(),
+          type: 'schedule' as const,
+          action: auditLog.action,
+          name: scheduleName,
+          ruleId: null,
+          scheduleId: scheduleId,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          completed: true,
+          // Weather stats
+          temperature: latestWeather?.temperature ?? null,
+          humidity: latestWeather?.humidity ?? null,
+          pressure: latestWeather?.pressure ?? null,
+          rain24h: latestWeather?.rain24h ?? null,
+          rain1h: latestWeather?.rain1h ?? null,
+          soilMoisture: latestWeather?.soilMoisture ?? null,
+          soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
+          // Action-specific details
+          actionDetails: {
+            zones: events.map(e => ({
+              zoneId: e.zoneId,
+              zoneName: e.zone.name,
+              durationSec: e.durationSec,
+              durationMinutes: Math.round(e.durationSec / 60),
+            })),
+            startTime: startTime.toISOString(),
+            finishTime: finishTime.toISOString(),
+            totalDurationSec: totalDurationSec,
+            totalDurationMinutes: Math.round(totalDurationSec / 60),
+          },
+        };
+      })
+    );
+    
+    // Filter out null entries
+    const validScheduleEntries = scheduleHistoryEntries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
     // Transform audit logs to history entries
-    const history = filteredAuditLogs.map((log) => {
+    const auditHistoryEntries = filteredAuditLogs.map((log) => {
       const details = log.details as any;
       
       // Determine type and extract relevant information
@@ -470,9 +741,65 @@ router.get('/history', async (req: Request, res: Response) => {
       };
     });
 
+    // Merge audit log entries and schedule event entries, then sort by timestamp
+    const allHistoryEntries = [...auditHistoryEntries, ...validScheduleEntries];
+    allHistoryEntries.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeB - timeA; // Descending order (newest first)
+    });
+
+    // Apply pagination to the merged and sorted results (only once, here)
+    const paginatedEntries = allHistoryEntries.slice(offset, offset + limit);
+
+    // Calculate accurate total count
+    // Count the actual schedule runs we created from fetched unlogged events
+    const scheduleRunsCount = scheduleRunsFromEvents.size;
+    const newlyCreatedAuditLogsCount = validScheduleEntries.length;
+    
+    // Estimate total unlogged schedule runs (including ones we just created audit logs for):
+    // - If we fetched all unlogged events, use the exact count of schedule runs we created
+    // - Otherwise, estimate based on the ratio of fetched events to total events
+    //   (assuming schedule runs scale proportionally with events)
+    let estimatedTotalScheduleRuns: number;
+    if (unloggedScheduleEventsTotal === 0) {
+      estimatedTotalScheduleRuns = 0;
+    } else if (unloggedScheduleEvents.length >= unloggedScheduleEventsTotal) {
+      // We fetched all unlogged events, so we have the exact count
+      // All unlogged schedule runs are now represented by newly created audit logs
+      estimatedTotalScheduleRuns = newlyCreatedAuditLogsCount;
+    } else {
+      // We didn't fetch all events, so estimate proportionally
+      // This assumes schedule runs scale roughly proportionally with events
+      const fetchedRatio = unloggedScheduleEvents.length / unloggedScheduleEventsTotal;
+      estimatedTotalScheduleRuns = Math.ceil(newlyCreatedAuditLogsCount / Math.max(fetchedRatio, 0.001));
+    }
+    
+    // Total count calculation:
+    // - auditLogTotal: count of existing audit logs (counted BEFORE we created new ones)
+    // - newlyCreatedAuditLogsCount: audit log entries we just created for unlogged schedule events
+    // - estimatedTotalScheduleRuns: total estimate of all schedule runs
+    //
+    // The total should include:
+    // 1. All existing audit logs (auditLogTotal) - this includes some schedule runs that were already logged
+    // 2. Newly created audit log entries (newlyCreatedAuditLogsCount) - these are now in the database
+    // 3. Estimated remaining unlogged schedule runs (estimatedTotalScheduleRuns - newlyCreatedAuditLogsCount)
+    //
+    // Since auditLogTotal was counted before we created new entries, we need to add:
+    // - The newly created audit log entries
+    // - Any remaining unlogged schedule runs (if we didn't fetch all events)
+    //
+    // Formula: auditLogTotal + newlyCreatedAuditLogsCount + max(0, estimatedTotalScheduleRuns - newlyCreatedAuditLogsCount)
+    // = auditLogTotal + max(newlyCreatedAuditLogsCount, estimatedTotalScheduleRuns)
+    //
+    // This ensures:
+    // - If we fetched all events: total = auditLogTotal + newlyCreatedAuditLogsCount (all schedule runs are now logged)
+    // - If we didn't fetch all: total = auditLogTotal + estimatedTotalScheduleRuns (includes estimate of remaining unlogged runs)
+    const totalWithSchedules = auditLogTotal + Math.max(newlyCreatedAuditLogsCount, estimatedTotalScheduleRuns);
+
     return res.json({
-      entries: history,
-      total,
+      entries: paginatedEntries,
+      total: totalWithSchedules,
       limit,
       offset,
     });
