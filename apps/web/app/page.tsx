@@ -145,14 +145,14 @@ export default function Dashboard() {
       const { setAuthToken: setApiAuth } = await import('../lib/api');
       setApiAuth(authToken);
 
-      // Filter to only enabled custom rules (not Rachio schedules)
-      const customRules = rules.filter(
-        (rule) => rule.enabled && rule.source !== 'rachio'
+      // Filter to only enabled custom rules (not Rachio schedules) with set_rain_delay action
+      const rainDelayRules = rules.filter(
+        (rule) => rule.enabled && rule.source !== 'rachio' && rule.actions.type === 'set_rain_delay'
       );
 
       // Check status for each rule in parallel
       const statusChecks = await Promise.allSettled(
-        customRules.map(async (rule) => {
+        rainDelayRules.map(async (rule) => {
           try {
             const status = await automationApi.checkRuleStatus(rule.id);
             return { rule, inEffect: status.inEffect };
@@ -570,7 +570,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Active Automations Notification */}
+        {/* Active Rain Delay Automations Notification */}
         {activeAutomations.length > 0 && (
           <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
             <div className="flex items-start">
@@ -578,9 +578,9 @@ export default function Dashboard() {
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
               <div className="flex-1">
-                <p className="text-blue-800 font-medium mb-1">Active Automations</p>
+                <p className="text-blue-800 font-medium mb-1">Active Rain Delays</p>
                 <p className="text-blue-700 text-sm mb-2">
-                  The following automation{activeAutomations.length > 1 ? 's are' : ' is'} currently in effect:
+                  The following rain delay{activeAutomations.length > 1 ? 's are' : ' is'} currently in effect:
                 </p>
                 <ul className="list-disc list-inside text-blue-700 text-sm mb-2 space-y-1">
                   {activeAutomations.map((automation) => (
