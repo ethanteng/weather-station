@@ -112,6 +112,7 @@ export interface ParsedWeatherData {
   rain1h?: number;
   rain24h?: number;
   rainTotal?: number;
+  rainRate?: number; // Current rain rate in inches per hour
   soilMoisture?: number; // Deprecated: use soilMoistureValues, kept for backward compatibility
   soilMoistureValues?: Record<string, number>; // { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
 }
@@ -247,11 +248,17 @@ export class EcowittClient {
       }
     }
 
-    // Parse rainfall - hourly = rain1h, daily = rain24h
+    // Parse rainfall - hourly = rain1h, daily = rain24h, rain_rate = current rate
     if (deviceData.rainfall?.hourly?.value) {
       const rain1h = parseFloat(deviceData.rainfall.hourly.value);
       if (!isNaN(rain1h)) {
         parsed.rain1h = rain1h;
+      }
+    }
+    if (deviceData.rainfall?.rain_rate?.value) {
+      const rainRate = parseFloat(deviceData.rainfall.rain_rate.value);
+      if (!isNaN(rainRate)) {
+        parsed.rainRate = rainRate;
       }
     }
     if (deviceData.rainfall?.daily?.value) {

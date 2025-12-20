@@ -56,6 +56,7 @@ export async function pollWeatherData(): Promise<void> {
         rain1h: parsed.rain1h,
         rain24h: parsed.rain24h,
         rainTotal: parsed.rainTotal,
+        rainRate: parsed.rainRate,
         soilMoisture: parsed.soilMoisture, // Backward compatibility
         soilMoistureValues: parsed.soilMoistureValues || undefined,
         rawPayload: deviceData as unknown as object,

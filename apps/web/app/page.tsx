@@ -677,7 +677,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="p-4 sm:p-6 flex flex-col flex-grow">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last Hour</div>
                   <div className="text-xl sm:text-2xl font-bold text-blue-700">
@@ -694,6 +694,12 @@ export default function Dashboard() {
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Last 7 Days</div>
                   <div className="text-xl sm:text-2xl font-bold text-blue-700">
                     {weather7d && weather7d.totalRainfall !== null ? `${weather7d.totalRainfall.toFixed(2)}"` : 'N/A'}
+                  </div>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Rain Rate</div>
+                  <div className="text-xl sm:text-2xl font-bold text-blue-700">
+                    {latestWeather && latestWeather.rainRate !== null ? `${latestWeather.rainRate.toFixed(2)}"/hr` : 'N/A'}
                   </div>
                 </div>
               </div>

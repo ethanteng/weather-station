@@ -19,6 +19,7 @@ model WeatherReading {
   rain1h             Float?   @map("rain_1h")
   rain24h            Float?   @map("rain_24h")
   rainTotal          Float?   @map("rain_total")
+  rainRate           Float?   @map("rain_rate") // Current rain rate in inches per hour
   soilMoisture       Float?   @map("soil_moisture") // Deprecated: use soilMoistureValues
   soilMoistureValues Json?    @map("soil_moisture_values") // JSON: { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
   rawPayload         Json     @map("raw_payload")

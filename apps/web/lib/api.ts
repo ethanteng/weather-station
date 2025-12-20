@@ -58,6 +58,7 @@ export interface WeatherReading {
   rain1h: number | null;
   rain24h: number | null;
   rainTotal: number | null;
+  rainRate: number | null; // Current rain rate in inches per hour
   soilMoisture: number | null; // Deprecated: use soilMoistureValues
   soilMoistureValues?: Record<string, number> | null; // { "soil_ch1": 45.2, "soil_ch2": 38.5, ... }
 }
