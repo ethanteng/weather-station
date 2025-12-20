@@ -102,7 +102,9 @@ export async function pollWeatherData(): Promise<void> {
     console.log('Weather data poll completed successfully', {
       temperature: parsed.temperature,
       humidity: parsed.humidity,
+      rain1h: parsed.rain1h,
       rain24h: parsed.rain24h,
+      rainRate: parsed.rainRate,
       soilMoisture: parsed.soilMoisture,
       soilMoistureSensors: parsed.soilMoistureValues ? Object.keys(parsed.soilMoistureValues).length : 0,
     });
