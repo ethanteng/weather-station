@@ -29,6 +29,7 @@ export interface EcowittDeviceData {
     daily?: { time: string; unit: string; value: string };
     event?: { time: string; unit: string; value: string };
     hourly?: { time: string; unit: string; value: string };
+    '1_hour'?: { time: string; unit: string; value: string }; // Alternative field name used by API
     weekly?: { time: string; unit: string; value: string };
     monthly?: { time: string; unit: string; value: string };
     yearly?: { time: string; unit: string; value: string };
@@ -249,27 +250,19 @@ export class EcowittClient {
     }
 
     // Parse rainfall - hourly = rain1h, daily = rain24h, rain_rate = current rate
-    if (deviceData.rainfall?.hourly?.value) {
-      const rain1h = parseFloat(deviceData.rainfall.hourly.value);
+    // Check both 'hourly' and '1_hour' field names (API uses different names)
+    const hourlyValue = deviceData.rainfall?.hourly?.value || deviceData.rainfall?.['1_hour']?.value;
+    if (hourlyValue) {
+      const rain1h = parseFloat(hourlyValue);
       if (!isNaN(rain1h)) {
         parsed.rain1h = rain1h;
-        console.log(`Parsed rain1h (hourly): ${rain1h} from value: ${deviceData.rainfall.hourly.value}`);
-      } else {
-        console.log(`Failed to parse rain1h from value: ${deviceData.rainfall.hourly.value}`);
       }
-    } else {
-      console.log('No rainfall.hourly.value found in API response');
     }
     if (deviceData.rainfall?.rain_rate?.value) {
       const rainRate = parseFloat(deviceData.rainfall.rain_rate.value);
       if (!isNaN(rainRate)) {
         parsed.rainRate = rainRate;
-        console.log(`Parsed rainRate: ${rainRate} from value: ${deviceData.rainfall.rain_rate.value}`);
-      } else {
-        console.log(`Failed to parse rainRate from value: ${deviceData.rainfall.rain_rate.value}`);
       }
-    } else {
-      console.log('No rainfall.rain_rate.value found in API response');
     }
     if (deviceData.rainfall?.daily?.value) {
       const rain24h = parseFloat(deviceData.rainfall.daily.value);
