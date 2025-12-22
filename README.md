@@ -423,6 +423,8 @@ Update environment variables accordingly for cloud deployment.
 - Verify DATABASE_URL matches docker-compose.yml settings
 - Check database logs: `docker-compose logs postgres`
 
-## License
+## Resetting the repo
+npm run reset
 
+## License
 MIT

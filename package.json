@@ -15,7 +15,10 @@
     "status": "sudo systemctl status weather-station-api weather-station-web",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
-    "db:studio": "npm run db:studio --workspace=apps/api"
+    "db:studio": "npm run db:studio --workspace=apps/api",
+    "clean": "rm -rf node_modules dist build .next .turbo .vite .cache .parcel-cache coverage .nyc_output .eslintcache *.tsbuildinfo",
+    "reset": "npm run clean && npm install",
+    "rebuild": "npm run clean && npm install && npm run build"
   },
   "engines": {
     "node": ">=18.0.0"

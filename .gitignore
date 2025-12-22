@@ -24,8 +24,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Local env files
-.env
-.env*.local
+.env*
+!.env.example
 
 # Vercel
 .vercel
@@ -40,4 +40,15 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 
+# Build caches
+.vite/
+.turbo/
+.cache/
+.parcel-cache/
 
+# Lint / test caches
+.eslintcache
+.nyc_output/
+
+# Logs (broader)
+*.log
