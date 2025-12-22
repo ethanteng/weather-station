@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import os
+import csv
 import json
 import time
-import requests
 from flask import Flask, jsonify
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright
 
 load_dotenv()
 
@@ -13,11 +13,10 @@ EMAIL = os.getenv("EBMUD_EMAIL")
 PASSWORD = os.getenv("EBMUD_PASSWORD")
 PORT = int(os.getenv("PORT", 8081))
 
-LOGIN_URL = "https://www.ebmud.com/user/login"
-USAGE_URL = "https://www.ebmud.com/my-account/water-usage"
+CSV_URL = "https://ebmud.watersmart.com/index.php/accountPreferences/download"
 
 CACHE_FILE = "/tmp/ebmud_cache.json"
-CACHE_TTL = 23 * 3600  # once per day, not suspicious
+CACHE_TTL = 23 * 3600  # once per day, politely
 
 app = Flask(__name__)
 
@@ -33,50 +32,55 @@ def save_cache(data):
     with open(CACHE_FILE, "w") as f:
         json.dump(data, f)
 
-def scrape_ebmud():
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (local water usage service)"
-    })
+def fetch_csv_via_browser():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
 
-    # Fetch login page for CSRF
-    r = session.get(LOGIN_URL)
-    r.raise_for_status()
+        # 1) Go to CSV URL — this will trigger SAML login
+        page.goto(CSV_URL, wait_until="networkidle")
 
-    soup = BeautifulSoup(r.text, "html.parser")
-    csrf = soup.find("input", {"name": "csrf_token"})
-    if not csrf:
-        raise RuntimeError("CSRF token not found")
+        # 2) Login form (CAS)
+        page.fill('input[name="username"]', EMAIL)
+        page.fill('input[name="password"]', PASSWORD)
+        page.click('button[type="submit"]')
 
-    payload = {
-        "email": EMAIL,
-        "password": PASSWORD,
-        "csrf_token": csrf["value"],
-    }
+        # 3) Wait for redirect back to WaterSmart
+        page.wait_for_url("**watersmart.com/**", timeout=60000)
 
-    r = session.post(LOGIN_URL, data=payload)
-    r.raise_for_status()
+        # 4) Trigger CSV download again (now authenticated)
+        with page.expect_download() as download_info:
+            page.goto(CSV_URL)
 
-    if "logout" not in r.text.lower():
-        raise RuntimeError("Login failed")
+        download = download_info.value
+        csv_path = download.path()
 
-    # Fetch usage page
-    r = session.get(USAGE_URL)
-    r.raise_for_status()
+        browser.close()
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    # 5) Parse CSV
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
 
-    usage_el = soup.select_one(".daily-usage .value")
-    if not usage_el:
-        raise RuntimeError("Usage element not found")
+    if not rows:
+        raise RuntimeError("CSV contained no rows")
 
-    gallons = float(
-        usage_el.text.lower().replace("gallons", "").strip()
+    latest = rows[-1]
+
+    usage = (
+        latest.get("Usage")
+        or latest.get("Usage (Gallons)")
+        or latest.get("Gallons")
     )
 
+    if usage is None:
+        raise RuntimeError(f"Unknown CSV schema: {latest.keys()}")
+
     return {
-        "source": "ebmud",
-        "daily_gallons": gallons,
+        "source": "ebmud_watersmart_playwright",
+        "latest_usage_gallons": float(usage),
+        "rows": len(rows),
         "timestamp": int(time.time())
     }
 
@@ -91,7 +95,7 @@ def daily_water():
         return jsonify(data | {"cached": True})
 
     try:
-        data = scrape_ebmud()
+        data = fetch_csv_via_browser()
         save_cache(data)
         return jsonify(data | {"cached": False})
     except Exception as e:
