@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: weather_station
       POSTGRES_PASSWORD: bellavistaweather
       POSTGRES_DB: weather_station
+    ports:
+    - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
