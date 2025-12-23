@@ -4,7 +4,7 @@ services:
     container_name: weather-station-db
     environment:
       POSTGRES_USER: weather_station
-      POSTGRES_PASSWORD: weather_station_password
+      POSTGRES_PASSWORD: bellavistaweather
       POSTGRES_DB: weather_station
     ports:
       - "5433:5432"
