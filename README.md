@@ -157,8 +157,8 @@ All API endpoints require authentication via `Authorization: Bearer <ADMIN_PASSW
 The system includes three default automation rules:
 
 1. **Rainy Day Pause**: If rain_24h ≥ 0.5" → set rain delay 48h
-2. **Too Wet: Skip**: If soil_moisture ≥ 40% → set rain delay 24h
-3. **Too Dry: Boost**: If soil_moisture ≤ 20% AND rain_24h < 0.1" → run lawn zone 10 min
+2. **Too Wet: Skip**: If soil_moisture ≥ 50% → set rain delay 24h
+3. **Too Dry: Boost**: If soil_moisture ≤ 30% AND rain_24h < 0.1" → run lawn zone 10 min
 
 Rules are evaluated twice daily (8 AM and 8 PM). Safety features:
 - Maximum one watering per zone per 24 hours
