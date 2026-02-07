@@ -74,10 +74,12 @@ function calculateScheduleDates(
     const scheduleStartDate = new Date(schedule.startDate);
     scheduleStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
     
-    // For interval schedules, always use the schedule's startDate as the base
-    // For day-of-week schedules, use the later of today or schedule startDate
-    const isIntervalSchedule = schedule.scheduleJobTypes?.some(jt => jt.startsWith('INTERVAL_')) || 
-                                (schedule.interval && schedule.interval > 0);
+    // Detect interval schedules - check multiple indicators since interval might be parsed later
+    const hasIntervalJobType = schedule.scheduleJobTypes?.some(jt => jt.startsWith('INTERVAL_'));
+    const hasIntervalField = schedule.interval && schedule.interval > 0;
+    // Check if summary indicates an interval schedule (e.g., "Every 30 days")
+    const summaryIndicatesInterval = schedule.summary && /every\s+\d+\s+days?/i.test(schedule.summary);
+    const isIntervalSchedule = hasIntervalJobType || hasIntervalField || summaryIndicatesInterval;
     
     if (isIntervalSchedule) {
       // For intervals, use schedule startDate as the base (even if in the past, 
@@ -176,7 +178,19 @@ function calculateScheduleDates(
       const interval = parseInt(summaryMatch[1], 10);
       if (!isNaN(interval) && interval > 0) {
         console.log(`[DEBUG] Parsed interval ${interval} from summary: "${schedule.summary}"`);
-        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate));
+        
+        // If we have a startDate, make sure we're using it as the base (not today)
+        // This ensures we calculate from the original schedule start date
+        let intervalStartDate = effectiveStartDate;
+        if (schedule.startDate) {
+          const scheduleStartDate = new Date(schedule.startDate);
+          scheduleStartDate.setHours(0, 0, 0, 0);
+          // For interval schedules parsed from summary, always use the schedule's startDate
+          intervalStartDate = scheduleStartDate;
+          console.log(`[DEBUG] Using schedule startDate ${intervalStartDate.toISOString()} for interval calculation`);
+        }
+        
+        dates.push(...calculateIntervalDates(intervalStartDate, effectiveEndDate, interval, schedule.endDate));
         calculatedDates = true;
       }
     }
@@ -189,7 +203,9 @@ function calculateScheduleDates(
     // Based on the screenshot, "All Other Zones" runs every 30 days
     // This is a hardcoded fallback - ideally the API should provide this
     console.warn(`[DEBUG] No interval found for "All Other Zones", using fallback interval of 30 days`);
-    dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, 30, schedule.endDate));
+    const scheduleStartDate = new Date(schedule.startDate);
+    scheduleStartDate.setHours(0, 0, 0, 0);
+    dates.push(...calculateIntervalDates(scheduleStartDate, effectiveEndDate, 30, schedule.endDate));
     calculatedDates = true;
   }
 
