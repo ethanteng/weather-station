@@ -148,9 +148,11 @@ function evaluateCondition(
  */
 function evaluateSoilMoistureCondition(
   condition: SoilMoistureCondition,
-  soilMoistureValues: Record<string, number> | null
+  soilMoistureValues: Record<string, number> | null,
+  ruleName?: string
 ): boolean {
   if (!soilMoistureValues || condition.sensors.length === 0) {
+    console.log(`[Automation Debug] ${ruleName || 'Rule'}: Soil moisture condition failed - no soil moisture values available`);
     return false;
   }
 
@@ -162,6 +164,7 @@ function evaluateSoilMoistureCondition(
     const sensorValue = soilMoistureValues[channelKey];
 
     if (sensorValue === undefined || sensorValue === null) {
+      console.log(`[Automation Debug] ${ruleName || 'Rule'}: Soil moisture condition failed - sensor ch${sensorCondition.channel} (${channelKey}) has no value`);
       results.push(false);
       continue;
     }
@@ -184,16 +187,18 @@ function evaluateSoilMoistureCondition(
         result = sensorValue === sensorCondition.value;
         break;
     }
+    
+    console.log(`[Automation Debug] ${ruleName || 'Rule'}: Soil moisture ch${sensorCondition.channel} = ${sensorValue}% ${sensorCondition.operator} ${sensorCondition.value}% → ${result ? 'PASS' : 'FAIL'}`);
     results.push(result);
   }
 
   // Apply logic operator
-  if (logic === 'OR') {
-    return results.some(r => r === true);
-  } else {
-    // AND logic (default)
-    return results.every(r => r === true);
-  }
+  const finalResult = logic === 'OR' 
+    ? results.some(r => r === true)
+    : results.every(r => r === true);
+  
+  console.log(`[Automation Debug] ${ruleName || 'Rule'}: Soil moisture condition (${logic}): ${finalResult ? 'PASS' : 'FAIL'}`);
+  return finalResult;
 }
 
 /**
@@ -214,8 +219,11 @@ function evaluateConditions(
     temperature?: Array<{ timestamp: Date; value: number }>;
     humidity?: Array<{ timestamp: Date; value: number }>;
     pressure?: Array<{ timestamp: Date; value: number }>;
-  }
+  },
+  ruleName?: string
 ): boolean {
+  console.log(`[Automation Debug] ${ruleName || 'Rule'}: Evaluating conditions...`);
+  
   // All conditions must be true (AND logic)
   for (const [field, condition] of Object.entries(conditions)) {
     // Special handling for soilMoisture condition (can be old or new format)
@@ -223,13 +231,17 @@ function evaluateConditions(
       // Check if it's the new format (has sensors array)
       if (condition && typeof condition === 'object' && 'sensors' in condition) {
         const sensorCondition = condition as SoilMoistureCondition;
-        if (!evaluateSoilMoistureCondition(sensorCondition, soilMoistureValues || null)) {
+        if (!evaluateSoilMoistureCondition(sensorCondition, soilMoistureValues || null, ruleName)) {
+          console.log(`[Automation Debug] ${ruleName || 'Rule'}: Condition evaluation FAILED - soilMoisture condition not met`);
           return false;
         }
       } else {
         // Old format: single sensor condition (backward compatibility)
         const oldCondition = condition as Condition;
-        if (!evaluateCondition('soilMoisture', oldCondition, weather)) {
+        const result = evaluateCondition('soilMoisture', oldCondition, weather);
+        console.log(`[Automation Debug] ${ruleName || 'Rule'}: Soil moisture (old format) = ${weather.soilMoisture} ${oldCondition.operator} ${oldCondition.value} → ${result ? 'PASS' : 'FAIL'}`);
+        if (!result) {
+          console.log(`[Automation Debug] ${ruleName || 'Rule'}: Condition evaluation FAILED - soilMoisture condition not met`);
           return false;
         }
       }
@@ -251,11 +263,18 @@ function evaluateConditions(
         }
       }
       
-      if (!evaluateCondition(fieldKey, conditionData, weather, fieldHistoricalData)) {
+      const result = evaluateCondition(fieldKey, conditionData, weather, fieldHistoricalData);
+      const value = weather[fieldKey];
+      console.log(`[Automation Debug] ${ruleName || 'Rule'}: ${fieldKey} = ${value} ${conditionData.operator} ${conditionData.value} → ${result ? 'PASS' : 'FAIL'}`);
+      
+      if (!result) {
+        console.log(`[Automation Debug] ${ruleName || 'Rule'}: Condition evaluation FAILED - ${fieldKey} condition not met`);
         return false;
       }
     }
   }
+  
+  console.log(`[Automation Debug] ${ruleName || 'Rule'}: All conditions PASSED`);
   return true;
 }
 
@@ -768,11 +787,16 @@ export async function evaluateRules(): Promise<void> {
     // Evaluate each rule
     for (const rule of rules) {
       try {
+        console.log(`[Automation] Evaluating rule: ${rule.name} (ID: ${rule.id})`);
         const conditions = rule.conditions as unknown as Conditions;
         const actions = rule.actions as unknown as Actions;
 
+        // Log current weather state
+        console.log(`[Automation Debug] ${rule.name}: Current weather - rain24h: ${weather.rain24h}", soilMoistureValues:`, soilMoistureValues);
+
         // Check if conditions are met
-        if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData)) {
+        if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData, rule.name)) {
+          console.log(`[Automation] Rule "${rule.name}" conditions met, executing action...`);
           // Execute the action
           const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues as Record<string, number> | null, rule.id, rule.name);
 
@@ -813,7 +837,11 @@ export async function evaluateRules(): Promise<void> {
                 source: 'automation',
               },
             });
+          } else {
+            console.log(`[Automation] Rule "${rule.name}" conditions met but action returned null (may be in cooldown or other issue)`);
           }
+        } else {
+          console.log(`[Automation] Rule "${rule.name}" conditions not met`);
         }
       } catch (error) {
         console.error(`Error evaluating rule ${rule.id} (${rule.name}):`, error);
