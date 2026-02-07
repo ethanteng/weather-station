@@ -552,6 +552,24 @@ export class RachioClient {
       }
       
       const schedules = scheduleRules.map((schedule: any) => {
+        // Debug: Log schedule details for "All Other Zones" or schedules missing timing data
+        const scheduleName = schedule.name || schedule.externalName || 'Unnamed Schedule';
+        if (scheduleName === 'All Other Zones' || (!schedule.scheduleJobTypes && !schedule.interval && !schedule.summary)) {
+          console.log(`[DEBUG] Processing schedule "${scheduleName}":`, {
+            id: schedule.id,
+            name: scheduleName,
+            scheduleJobTypes: schedule.scheduleJobTypes,
+            interval: schedule.interval,
+            frequency: schedule.frequency,
+            summary: schedule.summary,
+            repeat: schedule.repeat,
+            repeatConfig: schedule.repeatConfig,
+            startDate: schedule.startDate,
+            endDate: schedule.endDate,
+            endDateTimestamp: schedule.endDateTimestamp,
+            rawSchedule: schedule,
+          });
+        }
         // Extract weather intelligence fields
         const weatherIntelligence: RachioWeatherIntelligence = {};
         if (schedule.rainSkip !== undefined) weatherIntelligence.rainSkip = schedule.rainSkip === true;
@@ -578,9 +596,28 @@ export class RachioClient {
         }
         // Fallback: Try to parse interval from summary string (e.g., "Every 30 days")
         if (!interval && schedule.summary) {
-          const summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+          // Try multiple patterns to match different summary formats
+          let summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+          if (!summaryMatch) {
+            summaryMatch = schedule.summary.match(/(\d+)\s+days?/i);
+          }
+          if (!summaryMatch) {
+            summaryMatch = schedule.summary.match(/runs?\s+every\s+(\d+)\s+days?/i);
+          }
           if (summaryMatch) {
             interval = parseInt(summaryMatch[1], 10);
+            console.log(`[DEBUG] Extracted interval ${interval} from summary for schedule "${scheduleName}": "${schedule.summary}"`);
+          }
+        }
+        // Additional fallback: Check if repeat object has interval
+        if (!interval && schedule.repeat && typeof schedule.repeat === 'object') {
+          if (schedule.repeat.interval && typeof schedule.repeat.interval === 'number') {
+            interval = schedule.repeat.interval;
+          }
+        }
+        if (!interval && schedule.repeatConfig && typeof schedule.repeatConfig === 'object') {
+          if (schedule.repeatConfig.interval && typeof schedule.repeatConfig.interval === 'number') {
+            interval = schedule.repeatConfig.interval;
           }
         }
 

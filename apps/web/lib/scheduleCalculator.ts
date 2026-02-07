@@ -157,10 +157,21 @@ function calculateScheduleDates(
   
   // Last resort: Try to parse interval from summary string (e.g., "Every 30 days")
   if (!calculatedDates && schedule.summary) {
-    const summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+    // Try multiple patterns to match different summary formats
+    // Pattern 1: "Every 30 days" or "Every 30 day"
+    let summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+    if (!summaryMatch) {
+      // Pattern 2: "30 days" or "30 day interval"
+      summaryMatch = schedule.summary.match(/(\d+)\s+days?/i);
+    }
+    if (!summaryMatch) {
+      // Pattern 3: "Runs every 30 days"
+      summaryMatch = schedule.summary.match(/runs?\s+every\s+(\d+)\s+days?/i);
+    }
     if (summaryMatch) {
       const interval = parseInt(summaryMatch[1], 10);
       if (!isNaN(interval) && interval > 0) {
+        console.log(`[DEBUG] Parsed interval ${interval} from summary: "${schedule.summary}"`);
         dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate));
         calculatedDates = true;
       }
@@ -183,8 +194,10 @@ function calculateScheduleDates(
       enabled: schedule.enabled,
       effectiveStartDate: effectiveStartDate.toISOString(),
       effectiveEndDate: effectiveEndDate.toISOString(),
-      // Log full schedule object to debug
-      fullSchedule: schedule,
+      // Log all schedule properties to debug
+      allScheduleKeys: Object.keys(schedule),
+      // Log full schedule object to debug (but limit size to avoid console spam)
+      fullSchedule: JSON.parse(JSON.stringify(schedule, null, 2)),
     });
   }
   
