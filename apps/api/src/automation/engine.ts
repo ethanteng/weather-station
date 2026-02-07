@@ -552,6 +552,76 @@ async function executeAction(
       zonesToRun.push(...validZonesToRun);
     }
 
+    // Validate zones still exist in Rachio before attempting to run
+    // This prevents errors when zones were deleted from Rachio but still exist in our database
+    const deviceIds = new Set(zoneInfos.map(z => z.device?.id).filter((id): id is string => !!id));
+    const rachioZoneIds = new Set<string>();
+    let validationSkipped = false;
+    
+    for (const deviceId of deviceIds) {
+      try {
+        const rachioZones = await rachioClient.getZones(deviceId);
+        for (const zone of rachioZones) {
+          rachioZoneIds.add(zone.id);
+        }
+      } catch (error) {
+        // If we can't fetch zones from Rachio (e.g., rate limit), log warning but continue
+        // The Rachio API call will fail with a more specific error if zones are invalid
+        if (error instanceof RachioRateLimitError) {
+          console.warn(`Rate limit while validating zones for device ${deviceId}, skipping validation`);
+          validationSkipped = true;
+        } else {
+          console.warn(`Error fetching zones from Rachio for device ${deviceId}:`, error);
+          validationSkipped = true;
+        }
+      }
+    }
+    
+    // Only filter zones if we successfully fetched zone data from Rachio
+    // If validation was skipped (e.g., rate limit), proceed with all zones and let Rachio API handle validation
+    if (!validationSkipped && rachioZoneIds.size > 0) {
+      // Filter out zones that don't exist in Rachio
+      const invalidRachioZoneIds = zonesToRun.filter(z => !rachioZoneIds.has(z.zoneId)).map(z => z.zoneId);
+      
+      if (invalidRachioZoneIds.length > 0) {
+        console.error(`Cannot run zones - the following zone IDs are not found in Rachio: ${invalidRachioZoneIds.join(', ')}`);
+        console.error(`These zones may have been deleted from Rachio. Please update the automation rule with valid zone IDs.`);
+        failedZoneIds.push(...invalidRachioZoneIds);
+        
+        // Remove invalid zones from zonesToRun
+        const validRachioZonesToRun = zonesToRun.filter(z => rachioZoneIds.has(z.zoneId));
+        
+        if (validRachioZonesToRun.length === 0) {
+          // All zones are invalid in Rachio, return failure
+          return {
+            triggered: true,
+            action: `run_zone_${actions.minutes}min`,
+            details: {
+              minutes: actions.minutes,
+              zoneIds: [],
+              failedZoneIds: invalidRachioZoneIds,
+              skippedZoneIds,
+              durationSec,
+              soilMoisture: weather.soilMoisture,
+              rain24h: weather.rain24h,
+              zones: [],
+              error: 'All zones are invalid or not found in Rachio',
+            },
+          };
+        }
+        
+        // Update zonesToRun to only include valid zones
+        zonesToRun.length = 0;
+        zonesToRun.push(...validRachioZonesToRun);
+        
+        // Filter zoneInfos to only include valid zones
+        const validZoneInfoIds = new Set(validRachioZonesToRun.map(z => z.zoneId));
+        const filteredZoneInfos = zoneInfos.filter(z => validZoneInfoIds.has(z.id));
+        zoneInfos.length = 0;
+        zoneInfos.push(...filteredZoneInfos);
+      }
+    }
+
     // Get latest weather reading for complete weather stats (fetch once for all zones)
     const latestWeather = await prisma.weatherReading.findFirst({
       orderBy: { timestamp: 'desc' },
