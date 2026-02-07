@@ -487,8 +487,8 @@ export const automationApi = {
     return response.data;
   },
 
-  async run(dryRun: boolean = true): Promise<void> {
-    await api.post(`/api/automations/run?dryRun=${dryRun.toString()}`);
+  async run(): Promise<void> {
+    await api.post('/api/automations/run');
   },
 
   async getHistory(limit?: number, offset?: number): Promise<AutomationHistoryResponse> {

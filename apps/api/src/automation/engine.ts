@@ -346,8 +346,7 @@ async function executeAction(
   },
   _soilMoistureValues?: Record<string, number> | null,
   ruleId?: string,
-  ruleName?: string,
-  dryRun: boolean = false
+  ruleName?: string
 ): Promise<AutomationResult | null> {
   if (actions.type === 'set_rain_delay') {
     if (!actions.hours) {
@@ -373,13 +372,9 @@ async function executeAction(
     const successfulDeviceIds: string[] = [];
     const failedDeviceIds: string[] = [];
 
-    if (dryRun) {
-      console.log(`[DRY RUN] Would set rain delay on ${targetDevices.length} device(s) for ${actions.hours} hours`);
-      successfulDeviceIds.push(...targetDevices.map(d => d.id));
-    } else {
-      for (const device of targetDevices) {
-        try {
-          await rachioClient.setRainDelay(device.id, actions.hours);
+    for (const device of targetDevices) {
+      try {
+        await rachioClient.setRainDelay(device.id, actions.hours);
 
         // Get latest weather reading for complete weather stats
         const latestWeather = await prisma.weatherReading.findFirst({
@@ -392,8 +387,7 @@ async function executeAction(
           select: { name: true },
         });
 
-          if (!dryRun) {
-            await prisma.auditLog.create({
+        await prisma.auditLog.create({
               data: {
                 action: 'set_rain_delay',
                 details: {
@@ -414,9 +408,8 @@ async function executeAction(
                 source: 'automation',
               },
             });
-          }
 
-          successfulDeviceIds.push(device.id);
+        successfulDeviceIds.push(device.id);
         } catch (error) {
           console.error(`Error setting rain delay on device ${device.id}:`, error);
           failedDeviceIds.push(device.id);
@@ -558,31 +551,6 @@ async function executeAction(
       // Update zonesToRun to only include valid zones
       zonesToRun.length = 0;
       zonesToRun.push(...validZonesToRun);
-    }
-
-    if (dryRun) {
-      console.log(`[DRY RUN] Would run ${zonesToRun.length} zone(s) for ${actions.minutes} minutes`);
-      
-      return {
-        triggered: true,
-        action: `run_zone_${actions.minutes}min`,
-        details: {
-          minutes: actions.minutes,
-          zoneIds: zonesToRun.map(z => z.zoneId),
-          failedZoneIds: missingZoneIds,
-          skippedZoneIds,
-          durationSec,
-          soilMoisture: weather.soilMoisture,
-          rain24h: weather.rain24h,
-          zones: zoneInfos.map(z => ({
-            zoneId: z.id,
-            zoneName: z.name,
-            deviceId: z.device?.id || null,
-            deviceName: z.device?.name || null,
-          })),
-          dryRun: true,
-        },
-      };
     }
 
     // Get latest weather reading for complete weather stats (fetch once for all zones)
@@ -784,9 +752,8 @@ async function executeAction(
 /**
  * Evaluate all automation rules from database
  * Runs twice daily (8 AM and 8 PM) via cron job
- * @param dryRun If true, only evaluate conditions and log what would be executed, but don't actually execute actions
  */
-export async function evaluateRules(dryRun: boolean = false): Promise<void> {
+export async function evaluateRules(): Promise<void> {
   const apiKey = process.env.RACHIO_API_KEY;
   if (!apiKey) {
     console.error('Rachio API key not configured, skipping automation');
@@ -901,13 +868,9 @@ export async function evaluateRules(dryRun: boolean = false): Promise<void> {
 
         // Check if conditions are met
         if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData, rule.name)) {
-          if (dryRun) {
-            console.log(`[Automation] Rule "${rule.name}" conditions met (DRY RUN - would execute action)`);
-          } else {
-            console.log(`[Automation] Rule "${rule.name}" conditions met, executing action...`);
-          }
+          console.log(`[Automation] Rule "${rule.name}" conditions met, executing action...`);
           // Execute the action
-          const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues as Record<string, number> | null, rule.id, rule.name, dryRun);
+          const result = await executeAction(actions, devices, rachioClient, weather, soilMoistureValues as Record<string, number> | null, rule.id, rule.name);
 
           if (result) {
             results.push({
@@ -916,38 +879,36 @@ export async function evaluateRules(dryRun: boolean = false): Promise<void> {
               ruleName: rule.name,
             });
 
-            if (!dryRun) {
-              // Update rule's last run info (only in real runs, not dry runs)
-              await prisma.automationRule.update({
-                where: { id: rule.id },
-                data: {
-                  lastRunAt: new Date(),
-                  lastResult: JSON.stringify(result),
-                },
-              });
+            // Update rule's last run info
+            await prisma.automationRule.update({
+              where: { id: rule.id },
+              data: {
+                lastRunAt: new Date(),
+                lastResult: JSON.stringify(result),
+              },
+            });
 
-              // Create summary audit log entry for the triggered automation (only in real runs)
-              await prisma.auditLog.create({
-                data: {
-                  action: 'automation_triggered',
-                  details: {
-                    ruleId: rule.id,
-                    ruleName: rule.name,
-                    action: result.action,
-                    completed: true,
-                    temperature: latestWeather.temperature,
-                    humidity: latestWeather.humidity,
-                    pressure: latestWeather.pressure,
-                    rain24h: latestWeather.rain24h,
-                    rain1h: latestWeather.rain1h,
-                    soilMoisture: latestWeather.soilMoisture,
-                    soilMoistureValues: latestWeather.soilMoistureValues,
-                    resultDetails: result.details as any,
-                  },
-                  source: 'automation',
+            // Create summary audit log entry for the triggered automation
+            await prisma.auditLog.create({
+              data: {
+                action: 'automation_triggered',
+                details: {
+                  ruleId: rule.id,
+                  ruleName: rule.name,
+                  action: result.action,
+                  completed: true,
+                  temperature: latestWeather.temperature,
+                  humidity: latestWeather.humidity,
+                  pressure: latestWeather.pressure,
+                  rain24h: latestWeather.rain24h,
+                  rain1h: latestWeather.rain1h,
+                  soilMoisture: latestWeather.soilMoisture,
+                  soilMoistureValues: latestWeather.soilMoistureValues,
+                  resultDetails: result.details as any,
                 },
-              });
-            }
+                source: 'automation',
+              },
+            });
           } else {
             console.log(`[Automation] Rule "${rule.name}" conditions met but action returned null (may be in cooldown or other issue)`);
           }

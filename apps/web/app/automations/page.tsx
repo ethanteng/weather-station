@@ -160,10 +160,10 @@ export default function AutomationsPage() {
     try {
       setRunningAutomation(true);
       setError(null);
-      // Run in dry-run mode (only evaluate conditions, don't execute actions)
-      await automationApi.run(true);
-      // Don't refresh rules since we're in dry-run mode and didn't update lastRunAt
-      alert('Automation evaluation completed (dry run - no actions executed). Check server logs for detailed debugging information.');
+      await automationApi.run();
+      // Refresh rules to show updated lastRunAt times
+      await fetchRules();
+      alert('Automation evaluation completed. Check server logs for detailed debugging information.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run automation');
     } finally {
