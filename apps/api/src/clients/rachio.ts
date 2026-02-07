@@ -98,6 +98,18 @@ export class RachioRateLimitError extends Error {
   }
 }
 
+export class RachioInvalidZoneError extends Error {
+  zoneIds: string[];
+  rachioError?: { code?: string; error?: string };
+
+  constructor(message: string, zoneIds: string[], rachioError?: { code?: string; error?: string }) {
+    super(message);
+    this.name = 'RachioInvalidZoneError';
+    this.zoneIds = zoneIds;
+    this.rachioError = rachioError;
+  }
+}
+
 // Shared rate limit tracker across all RachioClient instances
 class RachioRateLimitTracker {
   private rateLimitResetTime: Date | null = null;
@@ -418,7 +430,48 @@ export class RachioClient {
       });
 
       console.log(`Started zone ${zoneId} for ${durationSec} seconds`);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle rate limit errors (429)
+      if (error instanceof RachioRateLimitError) {
+        throw error; // Re-throw rate limit errors as-is
+      }
+      
+      // Handle 429 status code
+      if (error.response?.status === 429) {
+        const reset = error.response.headers['x-ratelimit-reset'];
+        const remaining = error.response.headers['x-ratelimit-remaining'];
+        let resetDate: Date | undefined;
+        
+        if (reset) {
+          try {
+            resetDate = new Date(reset);
+          } catch (e) {
+            console.warn('Failed to parse rate limit reset time:', reset);
+          }
+        }
+        
+        throw new RachioRateLimitError(
+          `Rachio API rate limit exceeded. Resets at ${resetDate?.toISOString() || 'unknown time'}`,
+          resetDate,
+          remaining ? parseInt(remaining, 10) : null
+        );
+      }
+      
+      // Handle 400 errors (invalid zone)
+      if (error.response?.status === 400) {
+        const errorData = error.response?.data || {};
+        const errorMessage = errorData.error || errorData.message || 'Invalid zone request';
+        const errorCode = errorData.code || '400';
+        
+        console.error(`Rachio API returned 400 error for zone ${zoneId}:`, errorData);
+        throw new RachioInvalidZoneError(
+          `Failed to run zone: ${errorMessage} (code: ${errorCode})`,
+          [zoneId],
+          { code: errorCode, error: errorMessage }
+        );
+      }
+      
+      // For other errors, log and throw
       console.error(`Error running zone ${zoneId}:`, error);
       throw new Error(`Failed to run zone: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -440,7 +493,49 @@ export class RachioClient {
 
       const zoneIds = zoneRunDurations.map(z => z.zoneId).join(', ');
       console.log(`Started multiple zones [${zoneIds}] sequentially`);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle rate limit errors (429)
+      if (error instanceof RachioRateLimitError) {
+        throw error; // Re-throw rate limit errors as-is
+      }
+      
+      // Handle 429 status code
+      if (error.response?.status === 429) {
+        const reset = error.response.headers['x-ratelimit-reset'];
+        const remaining = error.response.headers['x-ratelimit-remaining'];
+        let resetDate: Date | undefined;
+        
+        if (reset) {
+          try {
+            resetDate = new Date(reset);
+          } catch (e) {
+            console.warn('Failed to parse rate limit reset time:', reset);
+          }
+        }
+        
+        throw new RachioRateLimitError(
+          `Rachio API rate limit exceeded. Resets at ${resetDate?.toISOString() || 'unknown time'}`,
+          resetDate,
+          remaining ? parseInt(remaining, 10) : null
+        );
+      }
+      
+      // Handle 400 errors (invalid zones)
+      if (error.response?.status === 400) {
+        const errorData = error.response?.data || {};
+        const zoneIds = zoneRunDurations.map(z => z.zoneId);
+        const errorMessage = errorData.error || errorData.message || 'Invalid zone request';
+        const errorCode = errorData.code || '400';
+        
+        console.error(`Rachio API returned 400 error for zones [${zoneIds.join(', ')}]:`, errorData);
+        throw new RachioInvalidZoneError(
+          `Failed to run zones: ${errorMessage} (code: ${errorCode})`,
+          zoneIds,
+          { code: errorCode, error: errorMessage }
+        );
+      }
+      
+      // For other errors, log and throw
       console.error(`Error running multiple zones:`, error);
       throw new Error(`Failed to run zones: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

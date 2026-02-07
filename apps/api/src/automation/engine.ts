@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { RachioClient } from '../clients/rachio';
+import { RachioClient, RachioRateLimitError, RachioInvalidZoneError } from '../clients/rachio';
 import { findLawnZone } from './zoneFinder';
 
 const prisma = new PrismaClient();
@@ -518,12 +518,50 @@ async function executeAction(
       };
     }
 
+    // Validate zones exist in database before attempting to run
+    const zoneInfos = await prisma.rachioZone.findMany({
+      where: { id: { in: zonesToRun.map(z => z.zoneId) } },
+      select: { id: true, name: true, device: { select: { id: true, name: true } } },
+    });
+
+    // Check if any zones are missing from database
+    const foundZoneIds = new Set(zoneInfos.map(z => z.id));
+    const missingZoneIds = zonesToRun.filter(z => !foundZoneIds.has(z.zoneId)).map(z => z.zoneId);
+    
+    if (missingZoneIds.length > 0) {
+      console.error(`Cannot run zones - the following zone IDs are not found in database: ${missingZoneIds.join(', ')}`);
+      console.error(`This may indicate zones were deleted from Rachio or the automation rule has stale zone IDs.`);
+      failedZoneIds.push(...missingZoneIds);
+      
+      // Remove missing zones from zonesToRun
+      const validZonesToRun = zonesToRun.filter(z => foundZoneIds.has(z.zoneId));
+      
+      if (validZonesToRun.length === 0) {
+        // All zones are invalid, return failure
+        return {
+          triggered: true,
+          action: `run_zone_${actions.minutes}min`,
+          details: {
+            minutes: actions.minutes,
+            zoneIds: [],
+            failedZoneIds: missingZoneIds,
+            skippedZoneIds,
+            durationSec,
+            soilMoisture: weather.soilMoisture,
+            rain24h: weather.rain24h,
+            zones: [],
+            error: 'All zones are invalid or not found in database',
+          },
+        };
+      }
+      
+      // Update zonesToRun to only include valid zones
+      zonesToRun.length = 0;
+      zonesToRun.push(...validZonesToRun);
+    }
+
     if (dryRun) {
       console.log(`[DRY RUN] Would run ${zonesToRun.length} zone(s) for ${actions.minutes} minutes`);
-      const zoneInfos = await prisma.rachioZone.findMany({
-        where: { id: { in: zonesToRun.map(z => z.zoneId) } },
-        select: { id: true, name: true, device: { select: { id: true, name: true } } },
-      });
       
       return {
         triggered: true,
@@ -531,7 +569,7 @@ async function executeAction(
         details: {
           minutes: actions.minutes,
           zoneIds: zonesToRun.map(z => z.zoneId),
-          failedZoneIds: [],
+          failedZoneIds: missingZoneIds,
           skippedZoneIds,
           durationSec,
           soilMoisture: weather.soilMoisture,
@@ -566,11 +604,7 @@ async function executeAction(
 
         await rachioClient.runZones(zoneRunDurations);
 
-        // Get zone and device info for audit logs
-        const zoneInfos = await prisma.rachioZone.findMany({
-          where: { id: { in: zonesToRun.map(z => z.zoneId) } },
-          select: { id: true, name: true, device: { select: { id: true, name: true } } },
-        });
+        // zoneInfos already fetched above for validation
 
         // Create watering events and audit logs for each zone
         for (const zoneInfo of zoneInfos) {
@@ -616,8 +650,26 @@ async function executeAction(
 
         successfulZoneIds.push(...zonesToRun.map(z => z.zoneId));
       } catch (error) {
-        console.error(`Error running multiple zones:`, error);
-        failedZoneIds.push(...zonesToRun.map(z => z.zoneId));
+        // Handle rate limit errors - log and skip execution
+        if (error instanceof RachioRateLimitError) {
+          console.error(`Rate limit error running zones: ${error.message}`);
+          console.error(`Rate limit resets at: ${error.resetTime?.toISOString() || 'unknown time'}`);
+          // Don't mark zones as failed due to rate limiting - they can be retried later
+          // Just log and return null to indicate the action couldn't complete
+          return null;
+        }
+        
+        // Handle invalid zone errors - mark zones as failed
+        if (error instanceof RachioInvalidZoneError) {
+          console.error(`Invalid zone error: ${error.message}`);
+          console.error(`Invalid zone IDs: ${error.zoneIds.join(', ')}`);
+          console.error(`Rachio error details:`, error.rachioError);
+          // Mark these zones as failed
+          failedZoneIds.push(...error.zoneIds);
+        } else {
+          console.error(`Error running multiple zones:`, error);
+          failedZoneIds.push(...zonesToRun.map(z => z.zoneId));
+        }
       }
     } else {
       // Single zone - use the original /start endpoint
@@ -672,8 +724,23 @@ async function executeAction(
 
         successfulZoneIds.push(zoneId);
       } catch (error) {
-        console.error(`Error running zone ${zoneId}:`, error);
-        failedZoneIds.push(zoneId);
+        // Handle rate limit errors - log and skip execution
+        if (error instanceof RachioRateLimitError) {
+          console.error(`Rate limit error running zone ${zoneId}: ${error.message}`);
+          console.error(`Rate limit resets at: ${error.resetTime?.toISOString() || 'unknown time'}`);
+          // Don't mark zone as failed due to rate limiting - can be retried later
+          return null;
+        }
+        
+        // Handle invalid zone errors
+        if (error instanceof RachioInvalidZoneError) {
+          console.error(`Invalid zone error for zone ${zoneId}: ${error.message}`);
+          console.error(`Rachio error details:`, error.rachioError);
+          failedZoneIds.push(zoneId);
+        } else {
+          console.error(`Error running zone ${zoneId}:`, error);
+          failedZoneIds.push(zoneId);
+        }
       }
     }
 
