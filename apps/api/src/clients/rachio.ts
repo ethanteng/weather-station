@@ -561,13 +561,22 @@ export class RachioClient {
             scheduleJobTypes: schedule.scheduleJobTypes,
             interval: schedule.interval,
             frequency: schedule.frequency,
+            intervalDays: schedule.intervalDays,
+            dayInterval: schedule.dayInterval,
+            daysInterval: schedule.daysInterval,
             summary: schedule.summary,
+            description: schedule.description,
+            type: schedule.type,
             repeat: schedule.repeat,
             repeatConfig: schedule.repeatConfig,
+            scheduleRule: schedule.scheduleRule,
             startDate: schedule.startDate,
             endDate: schedule.endDate,
             endDateTimestamp: schedule.endDateTimestamp,
-            rawSchedule: schedule,
+            // Log all keys to see what fields are actually available
+            allKeys: Object.keys(schedule),
+            // Log full raw schedule (but limit depth to avoid huge output)
+            rawSchedule: JSON.parse(JSON.stringify(schedule, null, 2)),
           });
         }
         // Extract weather intelligence fields
@@ -583,7 +592,13 @@ export class RachioClient {
         }
 
         // Extract interval from scheduleJobTypes if present (e.g., "INTERVAL_14" -> 14)
-        let interval: number | undefined = schedule.interval || schedule.frequency;
+        // Check multiple possible field names for interval/frequency
+        let interval: number | undefined = schedule.interval || 
+                                           schedule.frequency || 
+                                           schedule.intervalDays ||
+                                           schedule.dayInterval ||
+                                           schedule.daysInterval;
+        
         if (!interval && schedule.scheduleJobTypes && schedule.scheduleJobTypes.length > 0) {
           // Check all scheduleJobTypes, not just the first one
           for (const jobType of schedule.scheduleJobTypes) {
@@ -594,6 +609,14 @@ export class RachioClient {
             }
           }
         }
+        
+        // Check scheduleRule nested object if it exists
+        if (!interval && schedule.scheduleRule && typeof schedule.scheduleRule === 'object') {
+          interval = schedule.scheduleRule.interval || 
+                     schedule.scheduleRule.frequency ||
+                     schedule.scheduleRule.intervalDays;
+        }
+        
         // Fallback: Try to parse interval from summary string (e.g., "Every 30 days")
         if (!interval && schedule.summary) {
           // Try multiple patterns to match different summary formats
@@ -609,16 +632,27 @@ export class RachioClient {
             console.log(`[DEBUG] Extracted interval ${interval} from summary for schedule "${scheduleName}": "${schedule.summary}"`);
           }
         }
+        
         // Additional fallback: Check if repeat object has interval
         if (!interval && schedule.repeat && typeof schedule.repeat === 'object') {
           if (schedule.repeat.interval && typeof schedule.repeat.interval === 'number') {
             interval = schedule.repeat.interval;
+          } else if (schedule.repeat.frequency && typeof schedule.repeat.frequency === 'number') {
+            interval = schedule.repeat.frequency;
           }
         }
         if (!interval && schedule.repeatConfig && typeof schedule.repeatConfig === 'object') {
           if (schedule.repeatConfig.interval && typeof schedule.repeatConfig.interval === 'number') {
             interval = schedule.repeatConfig.interval;
+          } else if (schedule.repeatConfig.frequency && typeof schedule.repeatConfig.frequency === 'number') {
+            interval = schedule.repeatConfig.frequency;
           }
+        }
+        
+        // Last resort: Check if there's a type field that indicates interval schedule
+        // Some schedules might have type: "INTERVAL" or similar
+        if (!interval && schedule.type === 'INTERVAL' && schedule.value) {
+          interval = typeof schedule.value === 'number' ? schedule.value : parseInt(schedule.value, 10);
         }
 
         // Calculate start time from startHour and startMinute if available
@@ -642,7 +676,7 @@ export class RachioClient {
           deviceId: deviceId,
           // Schedule timing
           scheduleJobTypes: schedule.scheduleJobTypes,
-          summary: schedule.summary,
+          summary: schedule.summary || schedule.description, // Try description as fallback for summary
           startHour: schedule.startHour,
           startMinute: schedule.startMinute,
           operator: schedule.operator,
