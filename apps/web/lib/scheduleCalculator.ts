@@ -118,31 +118,52 @@ function calculateScheduleDates(
     }
   }
   
+  // Try to extract from repeat object if available (check this before fallback to interval)
+  if (!calculatedDates && schedule.repeat) {
+    const repeat = schedule.repeat;
+    // Only use repeat object if it actually has repeat configuration
+    // Skip if repeat indicates "does not repeat" (e.g., repeat.type === 'NONE' or similar)
+    const hasRepeatConfig = (repeat.interval && typeof repeat.interval === 'number' && repeat.interval > 0) ||
+                           (repeat.daysOfWeek && Array.isArray(repeat.daysOfWeek) && repeat.daysOfWeek.length > 0);
+    
+    if (hasRepeatConfig) {
+      // Check for interval in repeat object
+      if (repeat.interval && typeof repeat.interval === 'number' && repeat.interval > 0) {
+        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, repeat.interval, schedule.endDate));
+        calculatedDates = true;
+      }
+      // Check for daysOfWeek in repeat object
+      else if (repeat.daysOfWeek && Array.isArray(repeat.daysOfWeek) && repeat.daysOfWeek.length > 0) {
+        // Handle multiple days of week
+        for (const dayOfWeek of repeat.daysOfWeek) {
+          if (typeof dayOfWeek === 'number' && dayOfWeek >= 0 && dayOfWeek <= 6) {
+            dates.push(...calculateDayOfWeekDates(effectiveStartDate, effectiveEndDate, dayOfWeek, schedule.endDate));
+          }
+        }
+        // Remove duplicates and sort
+        dates = [...new Set(dates)].sort();
+        calculatedDates = true;
+      }
+    }
+  }
+  
   // Fallback to interval if scheduleJobTypes not available or didn't match
+  // This is checked AFTER repeat object to ensure we use the most specific data source
+  // Always check interval as fallback, even if repeat object exists (in case repeat says "does not repeat")
   if (!calculatedDates && schedule.interval && schedule.interval > 0) {
     dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, schedule.interval, schedule.endDate));
     calculatedDates = true;
   }
   
-  // Try to extract from repeat object if available
-  if (!calculatedDates && schedule.repeat) {
-    const repeat = schedule.repeat;
-    // Check for interval in repeat object
-    if (repeat.interval && typeof repeat.interval === 'number' && repeat.interval > 0) {
-      dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, repeat.interval, schedule.endDate));
-      calculatedDates = true;
-    }
-    // Check for daysOfWeek in repeat object
-    else if (repeat.daysOfWeek && Array.isArray(repeat.daysOfWeek) && repeat.daysOfWeek.length > 0) {
-      // Handle multiple days of week
-      for (const dayOfWeek of repeat.daysOfWeek) {
-        if (typeof dayOfWeek === 'number' && dayOfWeek >= 0 && dayOfWeek <= 6) {
-          dates.push(...calculateDayOfWeekDates(effectiveStartDate, effectiveEndDate, dayOfWeek, schedule.endDate));
-        }
+  // Last resort: Try to parse interval from summary string (e.g., "Every 30 days")
+  if (!calculatedDates && schedule.summary) {
+    const summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+    if (summaryMatch) {
+      const interval = parseInt(summaryMatch[1], 10);
+      if (!isNaN(interval) && interval > 0) {
+        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate));
+        calculatedDates = true;
       }
-      // Remove duplicates and sort
-      dates = [...new Set(dates)].sort();
-      calculatedDates = true;
     }
   }
 
@@ -154,9 +175,14 @@ function calculateScheduleDates(
       scheduleJobTypes: schedule.scheduleJobTypes,
       interval: schedule.interval,
       repeat: schedule.repeat,
+      summary: schedule.summary,
       startDate: schedule.startDate,
+      startDateFormatted: schedule.startDate ? new Date(schedule.startDate).toISOString() : null,
       endDate: schedule.endDate,
+      endDateFormatted: schedule.endDate ? new Date(schedule.endDate).toISOString() : null,
       enabled: schedule.enabled,
+      effectiveStartDate: effectiveStartDate.toISOString(),
+      effectiveEndDate: effectiveEndDate.toISOString(),
       // Log full schedule object to debug
       fullSchedule: schedule,
     });
@@ -167,8 +193,12 @@ function calculateScheduleDates(
     console.log(`[DEBUG] Calculated ${dates.length} dates for schedule "${schedule.name}":`, {
       scheduleJobTypes: schedule.scheduleJobTypes,
       interval: schedule.interval,
+      summary: schedule.summary,
+      startDate: schedule.startDate ? new Date(schedule.startDate).toISOString() : null,
+      endDate: schedule.endDate ? new Date(schedule.endDate).toISOString() : null,
       firstDate: dates[0],
       lastDate: dates[dates.length - 1],
+      allDates: dates.slice(0, 10), // Show first 10 dates
     });
   }
 

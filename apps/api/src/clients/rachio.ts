@@ -567,9 +567,20 @@ export class RachioClient {
         // Extract interval from scheduleJobTypes if present (e.g., "INTERVAL_14" -> 14)
         let interval: number | undefined = schedule.interval || schedule.frequency;
         if (!interval && schedule.scheduleJobTypes && schedule.scheduleJobTypes.length > 0) {
-          const intervalMatch = schedule.scheduleJobTypes[0].match(/INTERVAL_(\d+)/);
-          if (intervalMatch) {
-            interval = parseInt(intervalMatch[1], 10);
+          // Check all scheduleJobTypes, not just the first one
+          for (const jobType of schedule.scheduleJobTypes) {
+            const intervalMatch = jobType.match(/INTERVAL_(\d+)/);
+            if (intervalMatch) {
+              interval = parseInt(intervalMatch[1], 10);
+              break;
+            }
+          }
+        }
+        // Fallback: Try to parse interval from summary string (e.g., "Every 30 days")
+        if (!interval && schedule.summary) {
+          const summaryMatch = schedule.summary.match(/every\s+(\d+)\s+days?/i);
+          if (summaryMatch) {
+            interval = parseInt(summaryMatch[1], 10);
           }
         }
 
