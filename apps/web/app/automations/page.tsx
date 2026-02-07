@@ -160,10 +160,10 @@ export default function AutomationsPage() {
     try {
       setRunningAutomation(true);
       setError(null);
-      await automationApi.run();
-      // Refresh rules to show updated lastRunAt times
-      await fetchRules();
-      alert('Automation evaluation completed. Check server logs for detailed debugging information.');
+      // Run in dry-run mode (only evaluate conditions, don't execute actions)
+      await automationApi.run(true);
+      // Don't refresh rules since we're in dry-run mode and didn't update lastRunAt
+      alert('Automation evaluation completed (dry run - no actions executed). Check server logs for detailed debugging information.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run automation');
     } finally {
@@ -223,12 +223,12 @@ export default function AutomationsPage() {
               <button
                 onClick={handleRunNow}
                 disabled={runningAutomation}
-                className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 rounded-lg shadow-md hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 rounded-lg shadow-md hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none whitespace-nowrap"
               >
                 <svg className={`w-5 h-5 mr-2 ${runningAutomation ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                {runningAutomation ? 'Running...' : 'Run Now'}
+                {runningAutomation ? 'Checking...' : 'Run automation checks'}
               </button>
               <button
                 onClick={() => setEditingId('new')}

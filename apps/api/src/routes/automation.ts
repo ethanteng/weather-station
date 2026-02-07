@@ -1153,11 +1153,22 @@ router.post('/:id/disable', async (req: Request, res: Response) => {
 /**
  * POST /api/automations/run
  * Manually trigger automation evaluation
+ * Query parameter: dryRun=true to only evaluate conditions without executing actions
  */
-router.post('/run', async (_req: Request, res: Response) => {
+router.post('/run', async (req: Request, res: Response) => {
   try {
-    await evaluateRules();
-    return res.json({ success: true, message: 'Automation rules evaluated' });
+    const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
+    if (dryRun) {
+      console.log('[Automation] Running in DRY RUN mode - conditions will be evaluated but actions will NOT be executed');
+    }
+    await evaluateRules(dryRun);
+    return res.json({ 
+      success: true, 
+      message: dryRun 
+        ? 'Automation rules evaluated (dry run - no actions executed)' 
+        : 'Automation rules evaluated',
+      dryRun 
+    });
   } catch (error) {
     console.error('Error running automations:', error);
     return res.status(500).json({ error: 'Failed to run automations' });
