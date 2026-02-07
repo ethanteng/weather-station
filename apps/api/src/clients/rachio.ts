@@ -452,7 +452,7 @@ export class RachioClient {
         
         throw new RachioRateLimitError(
           `Rachio API rate limit exceeded. Resets at ${resetDate?.toISOString() || 'unknown time'}`,
-          resetDate,
+          resetDate ?? null,
           remaining ? parseInt(remaining, 10) : null
         );
       }
@@ -515,7 +515,7 @@ export class RachioClient {
         
         throw new RachioRateLimitError(
           `Rachio API rate limit exceeded. Resets at ${resetDate?.toISOString() || 'unknown time'}`,
-          resetDate,
+          resetDate ?? null,
           remaining ? parseInt(remaining, 10) : null
         );
       }
