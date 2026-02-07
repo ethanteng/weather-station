@@ -414,7 +414,6 @@ async function executeAction(
           console.error(`Error setting rain delay on device ${device.id}:`, error);
           failedDeviceIds.push(device.id);
         }
-      }
     }
 
     // Only return success if at least one device was updated
