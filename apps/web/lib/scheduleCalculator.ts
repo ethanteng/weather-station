@@ -9,7 +9,7 @@ export interface ScheduleOccurrence {
 }
 
 /**
- * Calculate which days a schedule will run over the next 30 days
+ * Calculate which days a schedule will run over the next 90 days
  */
 export function calculateScheduleOccurrences(
   automations: AutomationRule[],
@@ -17,7 +17,7 @@ export function calculateScheduleOccurrences(
 ): ScheduleOccurrence[] {
   const occurrences: ScheduleOccurrence[] = [];
   const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 30);
+  endDate.setDate(endDate.getDate() + 90);
 
   // Filter to only enabled Rachio schedules
   const rachioSchedules = automations.filter(

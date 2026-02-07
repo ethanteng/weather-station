@@ -26,11 +26,11 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
   const [scheduleZonesMap, setScheduleZonesMap] = useState<Map<string, ZoneDisplayData[]>>(new Map());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
-  // Generate array of 30 days starting from today
+  // Generate array of 90 days starting from today
   const today = new Date();
   const now = new Date(); // Current time for comparing scheduled times
   const days: Date[] = [];
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 90; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() + i);
     days.push(date);
