@@ -632,13 +632,15 @@ async function executeAction(
     if (zonesToRun.length > 1) {
       try {
         // Prepare zone run durations with sequential sortOrder (1, 2, 3, ...)
-        // Duration is already in seconds (durationSec = minutes * 60)
+        // Duration is in seconds (durationSec = minutes * 60)
+        // Note: runZones will convert to minutes and use 'id' field as required by Rachio API
         const zoneRunDurations = zonesToRun.map((zone, index) => ({
           zoneId: zone.zoneId,
-          duration: durationSec, // Duration in seconds
+          duration: durationSec, // Duration in seconds (will be converted to minutes in runZones)
           sortOrder: index + 1, // Sequential order: 1, 2, 3, ...
         }));
 
+        console.log(`Attempting to run ${zonesToRun.length} zones via start_multiple:`, zoneRunDurations.map(z => `${z.zoneId} (${Math.round(z.duration / 60)}min, order ${z.sortOrder})`).join(', '));
         await rachioClient.runZones(zoneRunDurations);
 
         // zoneInfos already fetched above for validation
@@ -696,13 +698,78 @@ async function executeAction(
           return null;
         }
         
-        // Handle invalid zone errors - mark zones as failed
+        // Handle invalid zone errors - fall back to running zones individually
         if (error instanceof RachioInvalidZoneError) {
-          console.error(`Invalid zone error: ${error.message}`);
-          console.error(`Invalid zone IDs: ${error.zoneIds.join(', ')}`);
+          console.error(`Invalid zone error with start_multiple: ${error.message}`);
           console.error(`Rachio error details:`, error.rachioError);
-          // Mark these zones as failed
-          failedZoneIds.push(...error.zoneIds);
+          console.error(`Falling back to running zones individually...`);
+          
+          // Try running each zone individually as a fallback
+          for (const zone of zonesToRun) {
+            console.log(`Attempting to run zone ${zone.zoneId} (${zone.zoneName}) individually...`);
+            try {
+              await rachioClient.runZone(zone.zoneId, durationSec);
+              
+              // Get zone info for this specific zone
+              const zoneInfo = zoneInfos.find(z => z.id === zone.zoneId);
+              
+              if (zoneInfo) {
+                await prisma.wateringEvent.create({
+                  data: {
+                    zoneId: zoneInfo.id,
+                    durationSec,
+                    source: 'automation',
+                    rawPayload: {
+                      soilMoisture: weather.soilMoisture,
+                      rain24h: weather.rain24h,
+                      ruleId: ruleId || null,
+                      ruleName: ruleName || null,
+                    },
+                  },
+                });
+
+                await prisma.auditLog.create({
+                  data: {
+                    action: 'run_zone',
+                    details: {
+                      zoneId: zoneInfo.id,
+                      zoneName: zoneInfo.name || null,
+                      deviceId: zoneInfo.device?.id || null,
+                      deviceName: zoneInfo.device?.name || null,
+                      durationSec,
+                      minutes: Math.round(durationSec / 60),
+                      ruleId: ruleId || null,
+                      ruleName: ruleName || null,
+                      completed: true,
+                      temperature: latestWeather?.temperature ?? null,
+                      humidity: latestWeather?.humidity ?? null,
+                      pressure: latestWeather?.pressure ?? null,
+                      rain24h: latestWeather?.rain24h ?? null,
+                      rain1h: latestWeather?.rain1h ?? null,
+                      soilMoisture: latestWeather?.soilMoisture ?? null,
+                      soilMoistureValues: latestWeather?.soilMoistureValues ?? null,
+                    },
+                    source: 'automation',
+                  },
+                });
+              }
+              
+              successfulZoneIds.push(zone.zoneId);
+            } catch (individualError) {
+              // Handle individual zone errors
+              if (individualError instanceof RachioRateLimitError) {
+                console.error(`Rate limit error running zone ${zone.zoneId}: ${individualError.message}`);
+                // Don't mark as failed due to rate limiting
+                return null;
+              } else if (individualError instanceof RachioInvalidZoneError) {
+                console.error(`Invalid zone error for zone ${zone.zoneId}: ${individualError.message}`);
+                failedZoneIds.push(zone.zoneId);
+              } else {
+                console.error(`Error running zone ${zone.zoneId}:`, individualError);
+                failedZoneIds.push(zone.zoneId);
+              }
+            }
+          }
         } else {
           console.error(`Error running multiple zones:`, error);
           failedZoneIds.push(...zonesToRun.map(z => z.zoneId));

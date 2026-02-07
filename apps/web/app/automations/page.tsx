@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { automationApi, AutomationRule, rachioApi, RachioDevice, RachioZone, sensorApi, SoilMoistureSensor, SoilMoistureCondition, SoilMoistureSensorCondition } from '../../lib/api';
 import Link from 'next/link';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Modal } from '../../components/Modal';
 
 export default function AutomationsPage() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -23,6 +24,16 @@ export default function AutomationsPage() {
     isOpen: false,
     message: '',
     onConfirm: () => {},
+  });
+  const [infoModal, setInfoModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    title?: string;
+    type?: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info',
   });
   const [runningAutomation, setRunningAutomation] = useState(false);
 
@@ -108,7 +119,12 @@ export default function AutomationsPage() {
   const handleDelete = async (id: string, source?: 'custom' | 'rachio') => {
     // Prevent deletion of Rachio schedules
     if (source === 'rachio') {
-      alert('Rachio schedules can only be deleted through the Rachio app.');
+      setInfoModal({
+        isOpen: true,
+        message: 'Rachio schedules can only be deleted through the Rachio app.',
+        title: 'Cannot Delete',
+        type: 'info',
+      });
       return;
     }
 
@@ -163,9 +179,20 @@ export default function AutomationsPage() {
       await automationApi.run();
       // Refresh rules to show updated lastRunAt times
       await fetchRules();
-      alert('Automation evaluation completed. Check server logs for detailed debugging information.');
+      setInfoModal({
+        isOpen: true,
+        message: 'Automation evaluation completed. Check server logs for detailed debugging information.',
+        title: 'Automation Complete',
+        type: 'success',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run automation');
+      setInfoModal({
+        isOpen: true,
+        message: err instanceof Error ? err.message : 'Failed to run automation',
+        title: 'Error',
+        type: 'error',
+      });
     } finally {
       setRunningAutomation(false);
     }
@@ -310,6 +337,14 @@ export default function AutomationsPage() {
                   });
                 }}
                 onCancel={() => setEditingId(null)}
+                onError={(message, title) => {
+                  setInfoModal({
+                    isOpen: true,
+                    message,
+                    title: title || 'Error',
+                    type: 'error',
+                  });
+                }}
               />
             </div>
           </div>
@@ -343,6 +378,14 @@ export default function AutomationsPage() {
                             rule={rule}
                             onSave={handleSave}
                             onCancel={() => setEditingId(null)}
+                            onError={(message, title) => {
+                              setInfoModal({
+                                isOpen: true,
+                                message,
+                                title: title || 'Error',
+                                type: 'error',
+                              });
+                            }}
                           />
                         </div>
                       ) : (
@@ -421,7 +464,12 @@ export default function AutomationsPage() {
                                 onDelete={handleDelete}
                                 onDuplicate={() => {
                                   // Rachio schedules cannot be duplicated
-                                  alert('Rachio schedules cannot be duplicated. Please create a new custom rule instead.');
+                                  setInfoModal({
+                                    isOpen: true,
+                                    message: 'Rachio schedules cannot be duplicated. Please create a new custom rule instead.',
+                                    title: 'Cannot Duplicate',
+                                    type: 'info',
+                                  });
                                 }}
                                 onStartSchedule={handleStartSchedule}
                                 onSkipSchedule={handleSkipSchedule}
@@ -471,6 +519,13 @@ export default function AutomationsPage() {
         confirmText="Delete"
         cancelText="Cancel"
         type="danger"
+      />
+      <Modal
+        isOpen={infoModal.isOpen}
+        onClose={() => setInfoModal({ ...infoModal, isOpen: false })}
+        title={infoModal.title}
+        message={infoModal.message}
+        type={infoModal.type}
       />
     </div>
   );
@@ -1527,10 +1582,12 @@ function RuleEditor({
   rule,
   onSave,
   onCancel,
+  onError,
 }: {
   rule: AutomationRule | null;
   onSave: (rule: AutomationRule) => void;
   onCancel: () => void;
+  onError?: (message: string, title?: string) => void;
 }) {
   const [name, setName] = useState(rule?.name || '');
   const [enabled, setEnabled] = useState(rule?.enabled ?? true);
@@ -1549,13 +1606,21 @@ function RuleEditor({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert('Rule name is required');
+      if (onError) {
+        onError('Rule name is required', 'Validation Error');
+      } else {
+        alert('Rule name is required');
+      }
       return;
     }
 
     // Validate run_zone action has zones selected
     if (actions.type === 'run_zone' && (!actions.zoneIds || actions.zoneIds.length === 0)) {
-      alert('Please select at least one zone for the run zone action');
+      if (onError) {
+        onError('Please select at least one zone for the run zone action', 'Validation Error');
+      } else {
+        alert('Please select at least one zone for the run zone action');
+      }
       return;
     }
 
