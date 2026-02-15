@@ -28,9 +28,39 @@ router.get('/latest', async (_req: Request, res: Response) => {
 });
 
 /**
+ * Compute rolling 24-hour rainfall for a reading using rainTotal (cumulative).
+ * rainTotal never resets within a 24h window (yearly counter), so we can derive
+ * rolling 24h = rainTotal(now) - rainTotal(24h ago).
+ * Falls back to sensor rain24h (calendar-day, resets at midnight) if rainTotal unavailable.
+ */
+function computeRolling24hRainfall(
+  reading: { timestamp: Date; rainTotal: number | null; rain24h: number | null },
+  allReadings: Array<{ timestamp: Date; rainTotal: number | null }>
+): number | null {
+  if (reading.rainTotal === null) {
+    return reading.rain24h;
+  }
+  const cutoff = new Date(reading.timestamp.getTime() - 24 * 60 * 60 * 1000);
+  // Find reading closest to 24h ago (at or before cutoff)
+  const priorReadings = allReadings.filter((r) => r.timestamp <= cutoff);
+  if (priorReadings.length === 0) {
+    return reading.rainTotal;
+  }
+  const prior = priorReadings.reduce((a, b) =>
+    b.timestamp > a.timestamp ? b : a
+  );
+  if (prior.rainTotal === null) {
+    return reading.rainTotal;
+  }
+  const rolling = reading.rainTotal - prior.rainTotal;
+  return rolling >= 0 ? rolling : reading.rainTotal;
+}
+
+/**
  * GET /api/weather/summary
  * Get aggregated weather statistics
  * Query params: range (24h|7d|30d)
+ * For 24h range: rainfall values use rolling 24-hour window (not calendar-day reset).
  */
 router.get('/summary', async (req: Request, res: Response) => {
   try {
@@ -53,10 +83,15 @@ router.get('/summary', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Invalid range. Use 24h, 7d, or 30d' });
     }
 
+    // For 24h range, fetch 48h of data to compute rolling 24h for each point
+    const queryStart = range === '24h'
+      ? new Date(now.getTime() - 48 * 60 * 60 * 1000)
+      : startDate;
+
     const readings = await prisma.weatherReading.findMany({
       where: {
         timestamp: {
-          gte: startDate,
+          gte: queryStart,
         },
       },
       orderBy: {
@@ -78,39 +113,54 @@ router.get('/summary', async (req: Request, res: Response) => {
       });
     }
 
-    // Calculate aggregates
-    const temps = readings.map(r => r.temperature).filter((t): t is number => t !== null);
-    const humidities = readings.map(r => r.humidity).filter((h): h is number => h !== null);
-    const pressures = readings.map(r => r.pressure).filter((p): p is number => p !== null);
-    const rains = readings.map(r => r.rain24h).filter((r): r is number => r !== null);
-    const soilMoistures = readings.map(r => r.soilMoisture).filter((s): s is number => s !== null);
+    // For 24h range, restrict to last 24h and compute rolling rainfall
+    const displayReadings = range === '24h'
+      ? readings.filter((r) => r.timestamp >= startDate)
+      : readings;
 
-    const latest = readings[readings.length - 1];
+    const rainfallValues = range === '24h'
+      ? displayReadings.map((r) =>
+          computeRolling24hRainfall(
+            { timestamp: r.timestamp, rainTotal: r.rainTotal, rain24h: r.rain24h },
+            readings.map((x) => ({ timestamp: x.timestamp, rainTotal: x.rainTotal }))
+          )
+        )
+      : displayReadings.map((r) => r.rain24h);
+
+    // Calculate aggregates
+    const temps = displayReadings.map(r => r.temperature).filter((t): t is number => t !== null);
+    const humidities = displayReadings.map(r => r.humidity).filter((h): h is number => h !== null);
+    const pressures = displayReadings.map(r => r.pressure).filter((p): p is number => p !== null);
+    const rains = rainfallValues.filter((r): r is number => r !== null);
+    const soilMoistures = displayReadings.map(r => r.soilMoisture).filter((s): s is number => s !== null);
+
+    const latest = displayReadings[displayReadings.length - 1];
+    const latestRain24h = rainfallValues[displayReadings.length - 1] ?? latest.rain24h;
 
     return res.json({
       range,
-      count: readings.length,
+      count: displayReadings.length,
       latest: {
         timestamp: latest.timestamp,
         temperature: latest.temperature,
         humidity: latest.humidity,
         pressure: latest.pressure,
-        rain24h: latest.rain24h,
+        rain24h: latestRain24h,
         soilMoisture: latest.soilMoisture, // Backward compatibility
         soilMoistureValues: latest.soilMoistureValues,
       },
       avgTemperature: temps.length > 0 ? temps.reduce((a, b) => a + b, 0) / temps.length : null,
       avgHumidity: humidities.length > 0 ? humidities.reduce((a, b) => a + b, 0) / humidities.length : null,
       avgPressure: pressures.length > 0 ? pressures.reduce((a, b) => a + b, 0) / pressures.length : null,
-      totalRainfall: rains.length > 0 ? Math.max(...rains) : null, // Use max rain24h as total
+      totalRainfall: rains.length > 0 ? Math.max(...rains) : null,
       maxSoilMoisture: soilMoistures.length > 0 ? Math.max(...soilMoistures) : null,
       minSoilMoisture: soilMoistures.length > 0 ? Math.min(...soilMoistures) : null,
-      readings: readings.map(r => ({
+      readings: displayReadings.map((r, i) => ({
         timestamp: r.timestamp,
         temperature: r.temperature,
         humidity: r.humidity,
         pressure: r.pressure,
-        rain24h: r.rain24h,
+        rain24h: rainfallValues[i] ?? r.rain24h,
         soilMoisture: r.soilMoisture, // Backward compatibility
         soilMoistureValues: r.soilMoistureValues,
       })),

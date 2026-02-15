@@ -687,7 +687,10 @@ export default function Dashboard() {
                 <div className="flex flex-col justify-between text-center p-4 bg-blue-50 rounded-lg border border-blue-100 min-h-[100px]">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Last 24 Hours</div>
                   <div className="text-lg sm:text-xl font-bold text-blue-700 truncate">
-                    {latestWeather && latestWeather.rain24h !== null ? `${latestWeather.rain24h.toFixed(2)}"` : 'N/A'}
+                    {(() => {
+                      const rain24h = weather24h?.latest?.rain24h ?? latestWeather?.rain24h;
+                      return rain24h != null ? `${rain24h.toFixed(2)}"` : 'N/A';
+                    })()}
                   </div>
                 </div>
                 <div className="flex flex-col justify-between text-center p-4 bg-blue-50 rounded-lg border border-blue-100 min-h-[100px]">
