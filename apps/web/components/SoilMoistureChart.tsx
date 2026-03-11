@@ -30,7 +30,7 @@ export function SoilMoistureChart({ data }: SoilMoistureChartProps) {
             tickLine={false}
           />
           <YAxis
-            domain={[0, 100]}
+            domain={[0, 80]}
             stroke="#64748b"
             fontSize={12}
             tickLine={false}

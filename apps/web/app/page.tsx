@@ -758,11 +758,11 @@ export default function Dashboard() {
                                   ></div>
                                 </div>
                                 <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                  currentValue < 30 ? 'bg-red-100 text-red-700' :
-                                  currentValue < 50 ? 'bg-yellow-100 text-yellow-700' :
+                                  currentValue < 35 ? 'bg-red-100 text-red-700' :
+                                  currentValue < 60 ? 'bg-yellow-100 text-yellow-700' :
                                   'bg-green-100 text-green-700'
                                 }`}>
-                                  {currentValue < 30 ? 'Dry' : currentValue < 50 ? 'Moderate' : 'Wet'}
+                                  {currentValue < 35 ? 'Dry' : currentValue < 60 ? 'Moderate' : 'Wet'}
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-500">Channel {sensor.channel}</div>
