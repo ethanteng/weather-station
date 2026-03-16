@@ -482,20 +482,20 @@ export class RachioClient {
    * 
    * Important notes:
    * - Zones run sequentially (one at a time), not simultaneously
-   * - Duration should be provided in seconds (will be converted to minutes for API)
+   * - Duration should be provided in seconds (same as /zone/start endpoint)
    * - sortOrder must be sequential (1, 2, 3, ...) for proper ordering
-   * - API expects: { zones: [{ id: string, duration: number (minutes), sortOrder: number }] }
+   * - API expects: { zones: [{ id: string, duration: number (seconds), sortOrder: number }] }
    * 
    * @param zoneRunDurations Array of zone run configurations with zoneId, duration (in seconds), and sortOrder
    */
   async runZones(zoneRunDurations: Array<{ zoneId: string; duration: number; sortOrder: number }>): Promise<void> {
     try {
       // Rachio API expects the body to be wrapped in a 'zones' object (not 'zoneRunDurations')
-      // and uses 'id' instead of 'zoneId', and duration in minutes (not seconds)
+      // and uses 'id' instead of 'zoneId'. Duration is in SECONDS (same as /zone/start).
       const requestBody = {
         zones: zoneRunDurations.map(z => ({
           id: z.zoneId, // API expects 'id' not 'zoneId'
-          duration: Math.round(z.duration / 60), // Convert seconds to minutes
+          duration: z.duration, // Duration in seconds (API expects seconds, same as zone/start)
           sortOrder: z.sortOrder,
         })),
       };
