@@ -633,10 +633,10 @@ async function executeAction(
       try {
         // Prepare zone run durations with sequential sortOrder (1, 2, 3, ...)
         // Duration is in seconds (durationSec = minutes * 60)
-        // Note: runZones will convert to minutes and use 'id' field as required by Rachio API
+        // runZones uses 'zoneRunDurations' body key and 'id' field as required by Rachio API
         const zoneRunDurations = zonesToRun.map((zone, index) => ({
           zoneId: zone.zoneId,
-          duration: durationSec, // Duration in seconds (will be converted to minutes in runZones)
+          duration: durationSec, // Duration in seconds
           sortOrder: index + 1, // Sequential order: 1, 2, 3, ...
         }));
 
