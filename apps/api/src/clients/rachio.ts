@@ -490,17 +490,17 @@ export class RachioClient {
    */
   async runZones(zoneRunDurations: Array<{ zoneId: string; duration: number; sortOrder: number }>): Promise<void> {
     try {
-      // Rachio API expects the body key 'zoneRunDurations' (not 'zones')
-      // and uses 'id' instead of 'zoneId'. Duration is in SECONDS (same as /zone/start).
+      // Rachio API expects the body key 'zones' with 'id' instead of 'zoneId'.
+      // Duration is in SECONDS (same as /zone/start).
       const requestBody = {
-        zoneRunDurations: zoneRunDurations.map(z => ({
+        zones: zoneRunDurations.map(z => ({
           id: z.zoneId, // API expects 'id' not 'zoneId'
           duration: z.duration, // Duration in seconds (Range is 0 - 10800 (3 Hours))
           sortOrder: z.sortOrder,
         })),
       };
 
-      console.log(`Sending start_multiple request with ${requestBody.zoneRunDurations.length} zones:`, JSON.stringify(requestBody, null, 2));
+      console.log(`Sending start_multiple request with ${requestBody.zones.length} zones:`, JSON.stringify(requestBody, null, 2));
       await this.client.put(`/zone/start_multiple`, requestBody);
 
       const zoneIds = zoneRunDurations.map(z => z.zoneId).join(', ');
