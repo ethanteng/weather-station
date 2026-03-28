@@ -1000,7 +1000,7 @@ export async function evaluateRules(): Promise<void> {
         const actions = rule.actions as unknown as Actions;
 
         // Log current weather state
-        console.log(`[Automation Debug] ${rule.name}: Current weather - rain24h: ${weather.rain24h}", soilMoistureValues:`, soilMoistureValues);
+        console.log(`[Automation Debug] ${rule.name}: Current weather - rain24h: ${weather.rain24h}, soilMoistureValues:`, soilMoistureValues);
 
         // Check if conditions are met
         if (evaluateConditions(conditions, weather, soilMoistureValues, historicalData, rule.name)) {
