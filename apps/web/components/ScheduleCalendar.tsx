@@ -9,6 +9,8 @@ import { rachioApi } from '../lib/api';
 interface ScheduleCalendarProps {
   automations: AutomationRule[];
   forecast: Forecast16DayResponse | null;
+  /** Bumps when parent refreshes Rachio (e.g. manual poll) so zone maps and clock resync even if rules payload is unchanged */
+  rachioDataRevision?: number;
   onScheduleSkipped?: () => void;
 }
 
@@ -21,23 +23,46 @@ interface ZoneDisplayData {
   duration: number;
 }
 
-export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: ScheduleCalendarProps) {
+export function ScheduleCalendar({
+  automations,
+  forecast,
+  rachioDataRevision = 0,
+  onScheduleSkipped,
+}: ScheduleCalendarProps) {
   const [skippingScheduleId, setSkippingScheduleId] = useState<string | null>(null);
   const [scheduleZonesMap, setScheduleZonesMap] = useState<Map<string, ZoneDisplayData[]>>(new Map());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  // Recompute on an interval so "next run", Skip, and same-day past/future update without waiting for parent fetch
+  const [now, setNow] = useState(() => new Date());
 
-  // Generate array of 90 days starting from today
-  const today = new Date();
-  const now = new Date(); // Current time for comparing scheduled times
+  useEffect(() => {
+    setNow(new Date());
+  }, [automations, rachioDataRevision]);
+
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const id = setInterval(tick, 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  const today = now;
+  // Generate array of 90 days starting from today (calendar date)
   const days: Date[] = [];
   for (let i = 0; i < 90; i++) {
-    const date = new Date(today);
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     date.setDate(date.getDate() + i);
     days.push(date);
   }
 
   // Calculate schedule occurrences
-  const occurrences = calculateScheduleOccurrences(automations, today);
+  const occurrences = calculateScheduleOccurrences(automations, now);
   
   // Recalculate isNextOccurrence based on current time - find the actual next occurrence that hasn't run yet
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -134,7 +159,7 @@ export function ScheduleCalendar({ automations, forecast, onScheduleSkipped }: S
     };
     
     fetchZoneData();
-  }, [automations]);
+  }, [automations, rachioDataRevision]);
 
   // Debug logging
   useEffect(() => {

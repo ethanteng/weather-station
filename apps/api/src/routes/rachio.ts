@@ -6,6 +6,11 @@ import { pollRachioData } from '../jobs/rachioPoll';
 const router = Router();
 const prisma = new PrismaClient();
 
+/** UI automation rules use ids like `rachio_<uuid>`; Rachio API expects the raw schedule id */
+function toRachioScheduleId(paramId: string): string {
+  return paramId.replace(/^rachio_/, '');
+}
+
 // Helper to handle rate limit errors
 function handleRateLimitError(error: unknown, res: Response): boolean {
   if (error instanceof RachioRateLimitError) {
@@ -483,7 +488,7 @@ router.get('/schedules', async (req: Request, res: Response) => {
  */
 router.put('/schedules/:id/enable', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = toRachioScheduleId(req.params.id);
     const apiKey = process.env.RACHIO_API_KEY;
     
     if (!apiKey) {
@@ -518,7 +523,7 @@ router.put('/schedules/:id/enable', async (req: Request, res: Response) => {
  */
 router.put('/schedules/:id/start', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = toRachioScheduleId(req.params.id);
     const apiKey = process.env.RACHIO_API_KEY;
     
     if (!apiKey) {
@@ -553,7 +558,7 @@ router.put('/schedules/:id/start', async (req: Request, res: Response) => {
  */
 router.put('/schedules/:id/skip', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = toRachioScheduleId(req.params.id);
     const apiKey = process.env.RACHIO_API_KEY;
     
     if (!apiKey) {

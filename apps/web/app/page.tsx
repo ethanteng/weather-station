@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse, RachioZone } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
@@ -40,6 +40,8 @@ export default function Dashboard() {
     durationNoCycle: number;
   } | null>>({});
   const [stoppingDevices, setStoppingDevices] = useState<Set<string>>(new Set());
+  /** Incremented after a manual Rachio poll + dashboard refresh so ScheduleCalendar rescans zones and schedule rules */
+  const [rachioDataRevision, setRachioDataRevision] = useState(0);
   const [rachioRateLimit, setRachioRateLimit] = useState<{
     rateLimited: boolean;
     resetTime: string | null;
@@ -184,6 +186,9 @@ export default function Dashboard() {
     }
   };
 
+  const fetchDataRef = useRef(fetchData);
+  fetchDataRef.current = fetchData;
+
   useEffect(() => {
     if (authToken) {
       fetchData();
@@ -197,6 +202,18 @@ export default function Dashboard() {
         clearInterval(rateLimitInterval);
       };
     }
+  }, [authToken]);
+
+  // Refresh dashboard when the user returns — keeps Schedule Calendar aligned with Rachio after app changes
+  useEffect(() => {
+    if (!authToken) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDataRef.current();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [authToken]);
 
   const checkRachioRateLimit = async () => {
@@ -802,6 +819,7 @@ export default function Dashboard() {
           <ScheduleCalendar
             automations={automations}
             forecast={forecast16d}
+            rachioDataRevision={rachioDataRevision}
             onScheduleSkipped={() => {
               // Refresh automation rules after skipping
               fetchData();
@@ -821,8 +839,9 @@ export default function Dashboard() {
                     setPollingRachio(true);
                     try {
                       await rachioApi.poll();
-                      // Refresh data after poll
+                      // Refresh devices, zones, schedule rules (calendar), and related dashboard state
                       await fetchData();
+                      setRachioDataRevision((v) => v + 1);
                       await checkRachioRateLimit();
                       setModal({
                         isOpen: true,
@@ -860,7 +879,7 @@ export default function Dashboard() {
                   }}
                   disabled={pollingRachio || rachioRateLimit?.rateLimited === true}
                   className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : "Manually refresh Rachio device and zone data"}
+                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : 'Refresh Rachio devices, zones, and the schedule calendar (on-demand)'}
                 >
                   {pollingRachio ? (
                     <>
