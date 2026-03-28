@@ -9,6 +9,32 @@ export interface ScheduleOccurrence {
 }
 
 /**
+ * Local calendar day Rachio uses to phase "every N days" intervals.
+ * Prefer startYear/startMonth/startDay from the API (calendar date in the rule);
+ * otherwise derive from startDate ms in the viewer's local timezone (not UTC midnight).
+ */
+function getIntervalPhaseAnchor(schedule: AutomationRule): Date | null {
+  if (
+    typeof schedule.startYear === 'number' &&
+    schedule.startMonth != null &&
+    typeof schedule.startDay === 'number'
+  ) {
+    const rawMonth = schedule.startMonth as number;
+    // Rachio typically uses 1–12 for month; JS Date uses 0–11
+    const jsMonth = rawMonth >= 1 && rawMonth <= 12 ? rawMonth - 1 : rawMonth;
+    const d = new Date(schedule.startYear, jsMonth, schedule.startDay);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  if (schedule.startDate != null && typeof schedule.startDate === 'number') {
+    const d = new Date(schedule.startDate);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  return null;
+}
+
+/**
  * Calculate which days a schedule will run over the next 90 days
  */
 export function calculateScheduleOccurrences(
@@ -63,33 +89,31 @@ function calculateScheduleDates(
     }
   }
 
-  // Determine the effective start date
-  // For interval-based schedules, use the schedule's startDate if it exists
-  // For day-of-week schedules, use today or the schedule's startDate, whichever is later
+  // Calendar window start (caller passes "today" for the Schedule Calendar)
   let effectiveStartDate = new Date(startDate);
-  effectiveStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
-  
-  if (schedule.startDate) {
-    // Rachio API returns timestamps in milliseconds (e.g., 1437677593983)
-    const scheduleStartDate = new Date(schedule.startDate);
-    scheduleStartDate.setHours(0, 0, 0, 0); // Normalize to start of day
-    
-    // Detect interval schedules - check multiple indicators since interval might be parsed later
-    const hasIntervalJobType = schedule.scheduleJobTypes?.some(jt => jt.startsWith('INTERVAL_'));
-    const hasIntervalField = schedule.interval && schedule.interval > 0;
-    // Check if summary indicates an interval schedule (e.g., "Every 30 days")
-    const summaryIndicatesInterval = schedule.summary && /every\s+\d+\s+days?/i.test(schedule.summary);
-    const isIntervalSchedule = hasIntervalJobType || hasIntervalField || summaryIndicatesInterval;
-    
-    if (isIntervalSchedule) {
-      // For intervals, use schedule startDate as the base (even if in the past, 
-      // we'll calculate forward from there)
+  effectiveStartDate.setHours(0, 0, 0, 0);
+  const viewRangeStart = new Date(effectiveStartDate);
+
+  const hasIntervalJobType = schedule.scheduleJobTypes?.some(jt => jt.startsWith('INTERVAL_'));
+  const hasIntervalField = !!(schedule.interval && schedule.interval > 0);
+  const summaryIndicatesInterval = !!(schedule.summary && /every\s+\d+\s+days?/i.test(schedule.summary));
+  const isIntervalSchedule = hasIntervalJobType || hasIntervalField || summaryIndicatesInterval;
+
+  const scheduleStartDate =
+    schedule.startDate != null
+      ? (() => {
+          const d = new Date(schedule.startDate as number);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        })()
+      : null;
+
+  if (isIntervalSchedule) {
+    const phase = getIntervalPhaseAnchor(schedule);
+    effectiveStartDate = phase ?? scheduleStartDate ?? viewRangeStart;
+  } else if (scheduleStartDate) {
+    if (scheduleStartDate > effectiveStartDate) {
       effectiveStartDate = scheduleStartDate;
-    } else {
-      // For day-of-week, use the later date
-      if (scheduleStartDate > effectiveStartDate) {
-        effectiveStartDate = scheduleStartDate;
-      }
     }
   }
 
@@ -107,7 +131,7 @@ function calculateScheduleDates(
       // Interval-based schedule (e.g., every 14 days)
       const interval = parseInt(jobType.replace('INTERVAL_', ''), 10);
       if (!isNaN(interval) && interval > 0) {
-        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate));
+        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, interval, schedule.endDate, viewRangeStart));
         calculatedDates = true;
       }
     } else if (jobType.startsWith('DAY_OF_WEEK_')) {
@@ -131,7 +155,7 @@ function calculateScheduleDates(
     if (hasRepeatConfig) {
       // Check for interval in repeat object
       if (repeat.interval && typeof repeat.interval === 'number' && repeat.interval > 0) {
-        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, repeat.interval, schedule.endDate));
+        dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, repeat.interval, schedule.endDate, viewRangeStart));
         calculatedDates = true;
       }
       // Check for daysOfWeek in repeat object
@@ -153,7 +177,7 @@ function calculateScheduleDates(
   // This is checked AFTER repeat object to ensure we use the most specific data source
   // Always check interval as fallback, even if repeat object exists (in case repeat says "does not repeat")
   if (!calculatedDates && schedule.interval && schedule.interval > 0) {
-    dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, schedule.interval, schedule.endDate));
+    dates.push(...calculateIntervalDates(effectiveStartDate, effectiveEndDate, schedule.interval, schedule.endDate, viewRangeStart));
     calculatedDates = true;
   }
   
@@ -178,19 +202,10 @@ function calculateScheduleDates(
       const interval = parseInt(summaryMatch[1], 10);
       if (!isNaN(interval) && interval > 0) {
         console.log(`[DEBUG] Parsed interval ${interval} from summary: "${schedule.summary}"`);
+
+        const intervalStartDate = getIntervalPhaseAnchor(schedule) ?? viewRangeStart;
         
-        // If we have a startDate, make sure we're using it as the base (not today)
-        // This ensures we calculate from the original schedule start date
-        let intervalStartDate = effectiveStartDate;
-        if (schedule.startDate) {
-          const scheduleStartDate = new Date(schedule.startDate);
-          scheduleStartDate.setHours(0, 0, 0, 0);
-          // For interval schedules parsed from summary, always use the schedule's startDate
-          intervalStartDate = scheduleStartDate;
-          console.log(`[DEBUG] Using schedule startDate ${intervalStartDate.toISOString()} for interval calculation`);
-        }
-        
-        dates.push(...calculateIntervalDates(intervalStartDate, effectiveEndDate, interval, schedule.endDate));
+        dates.push(...calculateIntervalDates(intervalStartDate, effectiveEndDate, interval, schedule.endDate, viewRangeStart));
         calculatedDates = true;
       }
     }
@@ -199,13 +214,17 @@ function calculateScheduleDates(
   // Very last resort: If we have a startDate but no interval, and this is "All Other Zones",
   // try to infer interval from the schedule name or use a reasonable default
   // This is a fallback for when the API doesn't return interval data
-  if (!calculatedDates && schedule.source === 'rachio' && schedule.startDate && schedule.name === 'All Other Zones') {
+  if (
+    !calculatedDates &&
+    schedule.source === 'rachio' &&
+    schedule.name === 'All Other Zones' &&
+    (schedule.startDate != null || getIntervalPhaseAnchor(schedule) != null)
+  ) {
     // Based on the screenshot, "All Other Zones" runs every 30 days
     // This is a hardcoded fallback - ideally the API should provide this
     console.warn(`[DEBUG] No interval found for "All Other Zones", using fallback interval of 30 days`);
-    const scheduleStartDate = new Date(schedule.startDate);
-    scheduleStartDate.setHours(0, 0, 0, 0);
-    dates.push(...calculateIntervalDates(scheduleStartDate, effectiveEndDate, 30, schedule.endDate));
+    const anchor = getIntervalPhaseAnchor(schedule) ?? viewRangeStart;
+    dates.push(...calculateIntervalDates(anchor, effectiveEndDate, 30, schedule.endDate, viewRangeStart));
     calculatedDates = true;
   }
 
@@ -253,13 +272,14 @@ function calculateScheduleDates(
  * Calculate dates for interval-based schedules
  */
 function calculateIntervalDates(
-  startDate: Date,
+  phaseAnchor: Date,
   endDate: Date,
   intervalDays: number,
-  scheduleEndDate?: number | null
+  scheduleEndDate: number | null | undefined,
+  rangeStart: Date
 ): string[] {
   const dates: string[] = [];
-  let currentDate = new Date(startDate);
+  let currentDate = new Date(phaseAnchor);
   currentDate.setHours(0, 0, 0, 0); // Normalize to start of day
   
   // Normalize endDate to end of day
@@ -275,19 +295,17 @@ function calculateIntervalDates(
     }
   }
 
-  // Only include dates that are >= today (don't show past occurrences)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  // Start from the schedule's startDate and calculate forward
-  // Skip past occurrences and only include future ones
-  while (currentDate < today) {
+  // First listed day is the next tick of the every-N-day grid on or after the calendar "today"
+  // (rangeStart from ScheduleCalendar), not Date.now() in the library (avoids subtle mismatches).
+  const windowStart = new Date(rangeStart);
+  windowStart.setHours(0, 0, 0, 0);
+
+  while (currentDate < windowStart) {
     const nextDate = new Date(currentDate);
     nextDate.setDate(nextDate.getDate() + intervalDays);
     currentDate.setTime(nextDate.getTime());
   }
 
-  // Add all occurrences from today forward
   while (currentDate <= effectiveEndDate) {
     dates.push(formatDate(currentDate));
     const nextDate = new Date(currentDate);
