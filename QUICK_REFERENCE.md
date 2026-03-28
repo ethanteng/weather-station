@@ -82,6 +82,53 @@ sudo journalctl -u weather-station-api -n 100 -f
 sudo systemctl daemon-reload
 ```
 
+## Builds & deployment
+
+From the **project root** (`~/weather-station`).
+
+### Build API and web
+
+```bash
+# Build all workspaces (API: prisma generate + tsc, Web: next build)
+npm run build
+```
+
+Build one app only:
+
+```bash
+npm run build --workspace=apps/api
+npm run build --workspace=apps/web
+```
+
+### Fresh / clean builds
+
+```bash
+# Remove root node_modules and common caches, reinstall, then build everything
+npm run rebuild
+```
+
+The root `clean` script removes `dist` / `.next` only at the repo root. For a clean compile without reinstalling all packages:
+
+```bash
+rm -rf apps/api/dist apps/web/.next
+npm run build
+```
+
+### Deploy on the server (build + restart systemd + follow logs)
+
+```bash
+npm run deploy:api   # API: build, restart weather-station-api, tail journal
+npm run deploy:web   # Web: build, restart weather-station-web, tail journal
+```
+
+These use `sudo` for `systemctl` and `journalctl`.
+
+### Prisma Client and TypeScript builds
+
+- **`npm run build` for the API runs `prisma generate` before `tsc`.** In an npm workspace, `npm install` alone often does not generate a client that matches `apps/api/prisma/schema.prisma`, which leads to missing types (for example `WeatherReading`, `SoilMoistureSensor`) and many `implicit any` errors. Always rely on **`npm run build`** (or `deploy:api`) for production builds, not only `tsc`.
+
+- Run Prisma via **this repo’s scripts** (`npm run build --workspace=apps/api`, `npm run db:generate`, or `cd apps/api && npx prisma …`). Do **not** use a globally installed **Prisma 7+** CLI against this project’s schema unless you have migrated the project to Prisma 7; the schema format differs and `prisma generate` / migrate may fail.
+
 ## Docker Database
 
 ### Restart Database
@@ -148,7 +195,7 @@ dotenv -e ../../.env -- prisma migrate deploy
 
 **Important:** Use `migrate deploy` in production, not `migrate dev`. The `deploy` command:
 - Only applies pending migrations
-- Does not regenerate Prisma Client (assumes it's already built)
+- Does not run `prisma generate` (regenerate with `npm run db:generate` or `npm run build --workspace=apps/api`)
 - Safe for production deployments without downtime
 
 ### Generate Prisma Client
@@ -163,6 +210,8 @@ npm run db:generate
 cd apps/api
 dotenv -e ../../.env -- prisma generate
 ```
+
+**Note:** A normal API production build also runs `prisma generate` (see **Builds & deployment**). Use `db:generate` when you need the client updated without a full compile.
 
 ### Check Migration Status
 

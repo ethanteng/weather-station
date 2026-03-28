@@ -3,6 +3,72 @@ import { RachioClient, RachioRateLimitError } from '../clients/rachio';
 
 const prisma = new PrismaClient();
 
+/** Skip / weather notices — not an actual zone run to record */
+function isInformationalScheduleEventSummary(summaryLower: string): boolean {
+  return (
+    summaryLower.includes('manually skipped') ||
+    summaryLower.includes('will be manually skipped') ||
+    summaryLower.includes('was skipped') ||
+    summaryLower.includes('will be skipped') ||
+    summaryLower.includes('has been skipped') ||
+    (summaryLower.includes('skipped') &&
+      (summaryLower.includes('scheduled for') || summaryLower.includes('was scheduled'))) ||
+    (summaryLower.includes('weather intelligence') && summaryLower.includes('skip')) ||
+    summaryLower.includes('rain skip') ||
+    summaryLower.includes('freeze skip') ||
+    summaryLower.includes('wind skip') ||
+    summaryLower.includes('climate skip') ||
+    summaryLower.includes('saturation skip') ||
+    summaryLower.includes('did not run')
+  );
+}
+
+/**
+ * Rachio /device/{id}/event sometimes omits type/subType; docs/webhooks use
+ * category=SCHEDULE, type=SCHEDULE_STATUS, subType=SCHEDULE_COMPLETED.
+ */
+function isScheduleWateringCompletionEvent(event: {
+  category?: string;
+  type?: string;
+  subType?: string;
+  subtype?: string;
+  summary?: string;
+  [key: string]: unknown;
+}): boolean {
+  if (event.category !== 'SCHEDULE' || !event.summary || typeof event.summary !== 'string') {
+    return false;
+  }
+  const summary = event.summary;
+  const summaryLower = summary.toLowerCase();
+
+  if (isInformationalScheduleEventSummary(summaryLower)) {
+    return false;
+  }
+
+  const type = event.type ?? (event as { eventType?: string }).eventType;
+  const subType =
+    event.subType ?? event.subtype ?? (event as { eventSubType?: string }).eventSubType;
+
+  if (type === 'SCHEDULE_STATUS' && subType === 'SCHEDULE_COMPLETED') {
+    return true;
+  }
+
+  // REST event list may only include a human summary for completions
+  if (
+    /ran\s+for\s+\d+\s+minute/i.test(summary) ||
+    /watered\s+for\s+\d+\s+minute/i.test(summaryLower) ||
+    /for\s+\d+\s+minutes?\s*\.?\s*$/i.test(summary.trim()) ||
+    /zone\s+\d+\s+completed/i.test(summaryLower) ||
+    (/\bcompleted\b/i.test(summary) &&
+      /\bminute/i.test(summary) &&
+      /zone/i.test(summaryLower))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function pollRachioData(): Promise<void> {
   const apiKey = process.env.RACHIO_API_KEY;
 
@@ -79,8 +145,8 @@ export async function pollRachioData(): Promise<void> {
       }
 
       // Fetch device events from Rachio API to get schedule watering events
-      // Look back 24 hours to catch recent schedule runs
-      const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+      // Look back 48 hours so overnight runs and API delays are less likely to be missed
+      const deviceEventsStartMs = Date.now() - 48 * 60 * 60 * 1000;
       const now = Date.now();
       
       // Create a map of zone names to zone IDs for this device
@@ -95,16 +161,18 @@ export async function pollRachioData(): Promise<void> {
       }
       
       try {
-        const deviceEvents = await client.getDeviceEvents(device.id, twentyFourHoursAgoMs, now);
-        console.log(`  Fetched ${deviceEvents.length} device events for device ${device.id}`);
+        const deviceEvents = await client.getDeviceEvents(device.id, deviceEventsStartMs, now);
+        console.log(`  Fetched ${deviceEvents.length} device events for device ${device.id} (last 48h)`);
         
         // Debug: Log all events to see their structure
         if (deviceEvents.length > 0) {
           console.log(`  Sample event structure:`, JSON.stringify(deviceEvents[0], null, 2));
         }
+
+        let scheduleNoticesIgnored = 0;
+        let scheduleEventsUnknownShape = 0;
         
-        // Process events to find schedule watering events
-        // Only process events with category='SCHEDULE', type='SCHEDULE_STATUS', and subType='SCHEDULE_COMPLETED'
+        // Process events to find schedule watering completions (not skips / weather notices)
         for (const event of deviceEvents) {
           // Parse event timestamp - eventDate is in milliseconds
           if (!event.eventDate || typeof event.eventDate !== 'number') {
@@ -118,23 +186,30 @@ export async function pollRachioData(): Promise<void> {
             continue; // Skip invalid timestamps
           }
           
-          // Check if this is a schedule completion event
-          // Only process events with category='SCHEDULE', type='SCHEDULE_STATUS', and subType='SCHEDULE_COMPLETED'
-          const isScheduleEvent = 
-            event.category === 'SCHEDULE' && 
-            event.type === 'SCHEDULE_STATUS' &&
-            event.subType === 'SCHEDULE_COMPLETED' &&
-            event.summary;
-          
-          if (!isScheduleEvent) {
-            console.log(`  Skipping event - not a schedule completion:`, {
-              id: event.id,
-              category: event.category,
-              type: event.type,
-              subType: event.subType,
-              summary: event.summary?.substring(0, 100)
-            });
-            continue; // Skip non-schedule events
+          const isCompletion = isScheduleWateringCompletionEvent(event);
+
+          if (!isCompletion) {
+            if (event.category === 'SCHEDULE' && typeof event.summary === 'string') {
+              if (isInformationalScheduleEventSummary(event.summary.toLowerCase())) {
+                scheduleNoticesIgnored++;
+                console.log(`  Schedule notice (not a run):`, {
+                  id: event.id,
+                  type: event.type,
+                  subType: event.subType ?? (event as { subtype?: string }).subtype,
+                  summary: event.summary.substring(0, 120),
+                });
+              } else {
+                scheduleEventsUnknownShape++;
+                console.log(`  Skipping event - not recognized as schedule watering completion:`, {
+                  id: event.id,
+                  category: event.category,
+                  type: event.type,
+                  subType: event.subType ?? (event as { subtype?: string }).subtype,
+                  summary: event.summary.substring(0, 120),
+                });
+              }
+            }
+            continue;
           }
           
           console.log(`  Processing schedule event:`, {
@@ -312,6 +387,12 @@ export async function pollRachioData(): Promise<void> {
             console.log(`  Skipping duplicate schedule event for zone ${zoneName} (${zoneId}) at ${eventTimestamp.toISOString()}`);
           }
         }
+
+        if (deviceEvents.length > 0) {
+          console.log(
+            `  Device event summary: ${deviceEvents.length} in window; ${scheduleNoticesIgnored} schedule notice(s) (skip/weather — not a zone run); ${scheduleEventsUnknownShape} SCHEDULE event(s) not recognized as a completion (check summary/API shape)`
+          );
+        }
       } catch (error: any) {
         // Don't fail the entire poll if event fetching fails (might be rate limited or API issue)
         if (error instanceof RachioRateLimitError) {
@@ -322,9 +403,8 @@ export async function pollRachioData(): Promise<void> {
       }
 
       // Check for schedule watering events that don't have audit log entries yet
-      // Look for watering events with source='schedule' from the last 24 hours
-      // (increased from 6 hours to catch events that may have been stored but not yet processed)
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // Align lookback with device event fetch window above
+      const scheduleHistoryCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
       const recentScheduleEvents = await prisma.wateringEvent.findMany({
         where: {
           zone: {
@@ -332,7 +412,7 @@ export async function pollRachioData(): Promise<void> {
           },
           source: 'schedule',
           timestamp: {
-            gte: twentyFourHoursAgo,
+            gte: scheduleHistoryCutoff,
           },
         },
         include: {
@@ -343,7 +423,7 @@ export async function pollRachioData(): Promise<void> {
         },
       });
       
-      console.log(`  Found ${recentScheduleEvents.length} schedule watering events from last 24 hours for device ${device.id}`);
+      console.log(`  Found ${recentScheduleEvents.length} stored schedule watering event(s) in last 48h for device ${device.id}`);
 
       // Get latest weather reading for weather stats
       const latestWeather = await prisma.weatherReading.findFirst({
@@ -359,7 +439,7 @@ export async function pollRachioData(): Promise<void> {
           action: 'rachio_schedule_ran',
           source: 'rachio_schedule',
           timestamp: {
-            gte: twentyFourHoursAgo,
+            gte: scheduleHistoryCutoff,
           },
         },
       });
