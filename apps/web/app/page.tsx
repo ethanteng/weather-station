@@ -2,19 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, forecastApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, Forecast16DayResponse, RachioZone } from '../lib/api';
+import { weatherApi, rachioApi, automationApi, wateringApi, sensorApi, WeatherReading, WeatherSummary, RachioDevice, WateringEvent, AutomationRule, SoilMoistureSensor, RachioZone } from '../lib/api';
 import { WeatherCard } from '../components/WeatherCard';
 import { RainfallChart } from '../components/RainfallChart';
 import { WateringEventsTable } from '../components/WateringEventsTable';
 import { Forecast7Day } from '../components/Forecast7Day';
-import { ScheduleCalendar } from '../components/ScheduleCalendar';
 import { Modal } from '../components/Modal';
+import { RuleView } from '../components/AutomationRuleView';
 
 export default function Dashboard() {
   const [latestWeather, setLatestWeather] = useState<WeatherReading | null>(null);
   const [weather24h, setWeather24h] = useState<WeatherSummary | null>(null);
   const [weather7d, setWeather7d] = useState<WeatherSummary | null>(null);
-  const [forecast16d, setForecast16d] = useState<Forecast16DayResponse | null>(null);
   const [devices, setDevices] = useState<RachioDevice[]>([]);
   const [wateringEvents, setWateringEvents] = useState<WateringEvent[]>([]);
   const [automations, setAutomations] = useState<AutomationRule[]>([]);
@@ -40,8 +39,6 @@ export default function Dashboard() {
     durationNoCycle: number;
   } | null>>({});
   const [stoppingDevices, setStoppingDevices] = useState<Set<string>>(new Set());
-  /** Incremented after a manual Rachio poll + dashboard refresh so ScheduleCalendar rescans zones and schedule rules */
-  const [rachioDataRevision, setRachioDataRevision] = useState(0);
   const [rachioRateLimit, setRachioRateLimit] = useState<{
     rateLimited: boolean;
     resetTime: string | null;
@@ -79,11 +76,10 @@ export default function Dashboard() {
       const { setAuthToken: setApiAuth } = await import('../lib/api');
       setApiAuth(authToken);
 
-      const [latest, summary24h, summary7d, forecast16Day, rachioDevices, automationRulesResponse, events, sensorData] = await Promise.all([
+      const [latest, summary24h, summary7d, rachioDevices, automationRulesResponse, events, sensorData] = await Promise.all([
         weatherApi.getLatest().catch(() => null),
         weatherApi.getSummary('24h').catch(() => null),
         weatherApi.getSummary('7d').catch(() => null),
-        forecastApi.get16Day().catch(() => null),
         rachioApi.getDevices().catch(() => []),
         automationApi.getRules().catch(() => []),
         wateringApi.getEvents(10).catch(() => []),
@@ -93,7 +89,6 @@ export default function Dashboard() {
       setLatestWeather(latest);
       setWeather24h(summary24h);
       setWeather7d(summary7d);
-      setForecast16d(forecast16Day);
       setDevices(rachioDevices);
       
       // Handle automation rules response (can be array or object with rateLimitError)
@@ -204,7 +199,7 @@ export default function Dashboard() {
     }
   }, [authToken]);
 
-  // Refresh dashboard when the user returns — keeps Schedule Calendar aligned with Rachio after app changes
+  // Refresh dashboard when the user returns after switching tabs or apps
   useEffect(() => {
     if (!authToken) return;
     const onVisible = () => {
@@ -226,6 +221,36 @@ export default function Dashboard() {
     } catch (err) {
       // Silently fail - rate limit check is not critical
       console.error('Error checking rate limit status:', err);
+    }
+  };
+
+  const handleRachioStartSchedule = async (id: string) => {
+    try {
+      const rachioScheduleId = id.replace(/^rachio_/, '');
+      await rachioApi.startSchedule(rachioScheduleId);
+      await fetchData();
+    } catch (err) {
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to start schedule',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleRachioSkipSchedule = async (id: string) => {
+    try {
+      const rachioScheduleId = id.replace(/^rachio_/, '');
+      await rachioApi.skipSchedule(rachioScheduleId);
+      await fetchData();
+    } catch (err) {
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to skip schedule',
+        type: 'error',
+      });
     }
   };
 
@@ -814,22 +839,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Schedule Calendar */}
-        <div className="mb-6">
-          <ScheduleCalendar
-            automations={automations}
-            forecast={forecast16d}
-            rachioDataRevision={rachioDataRevision}
-            onScheduleSkipped={() => {
-              // Refresh automation rules after skipping
-              fetchData();
-            }}
-          />
-        </div>
-
         {/* Rachio Devices Status */}
         {devices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+          <div className="mb-6 bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
             <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <h2 className="text-lg sm:text-xl font-semibold text-white">Rachio Devices</h2>
@@ -839,9 +851,8 @@ export default function Dashboard() {
                     setPollingRachio(true);
                     try {
                       await rachioApi.poll();
-                      // Refresh devices, zones, schedule rules (calendar), and related dashboard state
+                      // Refresh devices, zones, and related dashboard state
                       await fetchData();
-                      setRachioDataRevision((v) => v + 1);
                       await checkRachioRateLimit();
                       setModal({
                         isOpen: true,
@@ -879,7 +890,7 @@ export default function Dashboard() {
                   }}
                   disabled={pollingRachio || rachioRateLimit?.rateLimited === true}
                   className="inline-flex items-center px-4 py-2.5 text-sm font-medium text-white bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : 'Refresh Rachio devices, zones, and the schedule calendar (on-demand)'}
+                  title={rachioRateLimit?.rateLimited ? `Rate limited. ${rachioRateLimit.message || 'Please wait.'}` : 'Refresh Rachio devices and zones (on-demand)'}
                 >
                   {pollingRachio ? (
                     <>
@@ -949,6 +960,91 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Rachio Schedules (from Rachio app) */}
+        {automations.filter((r) => r.source === 'rachio').length > 0 && (
+          <div className="mb-6 bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+            <div className="bg-slate-800 px-4 sm:px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Rachio Schedules</h2>
+              <p className="text-sm text-slate-300 mt-1">Schedules configured in the Rachio app</p>
+            </div>
+            <div className="p-4 sm:p-6">
+              {(() => {
+                const rachioRules = automations.filter((r) => r.source === 'rachio');
+                const groupedByDevice = rachioRules.reduce(
+                  (acc, rule) => {
+                    const deviceName = rule.deviceName || 'Unknown Device';
+                    if (!acc[deviceName]) acc[deviceName] = [];
+                    acc[deviceName].push(rule);
+                    return acc;
+                  },
+                  {} as Record<string, AutomationRule[]>
+                );
+                const deviceNames = Object.keys(groupedByDevice).sort((a, b) => {
+                  const aLower = a.toLowerCase();
+                  const bLower = b.toLowerCase();
+                  if (aLower.includes('front') && !bLower.includes('front')) return -1;
+                  if (!aLower.includes('front') && bLower.includes('front')) return 1;
+                  if (aLower.includes('back') && !bLower.includes('back')) return -1;
+                  if (!aLower.includes('back') && bLower.includes('back')) return 1;
+                  return a.localeCompare(b);
+                });
+                return (
+                  <div className="space-y-6">
+                    {deviceNames.map((deviceName) => (
+                      <div key={deviceName}>
+                        <div className="mb-3 flex items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-800">{deviceName}</h3>
+                          <span className="text-sm text-slate-500">
+                            ({groupedByDevice[deviceName].length} schedule
+                            {groupedByDevice[deviceName].length !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                        <div className="space-y-4">
+                          {groupedByDevice[deviceName].map((rule) => (
+                            <div
+                              key={rule.id}
+                              className={`rounded-xl shadow-md border transition-all duration-200 hover:shadow-lg ${
+                                rule.enabled ? 'border-green-200' : 'border-slate-200 opacity-75'
+                              }`}
+                            >
+                              <RuleView
+                                rule={rule}
+                                onEdit={() => {}}
+                                onToggle={() => {}}
+                                onDelete={(_id, source) => {
+                                  if (source === 'rachio') {
+                                    setModal({
+                                      isOpen: true,
+                                      title: 'Cannot Delete',
+                                      message: 'Rachio schedules can only be deleted through the Rachio app.',
+                                      type: 'info',
+                                    });
+                                  }
+                                }}
+                                onDuplicate={() => {
+                                  setModal({
+                                    isOpen: true,
+                                    title: 'Cannot Duplicate',
+                                    message:
+                                      'Rachio schedules cannot be duplicated. Please create a new custom rule instead.',
+                                    type: 'info',
+                                  });
+                                }}
+                                onStartSchedule={handleRachioStartSchedule}
+                                onSkipSchedule={handleRachioSkipSchedule}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
