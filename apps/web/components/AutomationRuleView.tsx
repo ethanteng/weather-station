@@ -482,6 +482,69 @@ export function RuleView({
             </div>
           </div>
 
+          {/* Rachio: summary + start time on card face (always visible) */}
+          {isRachioSchedule &&
+            (('summary' in rule && rule.summary) ||
+              ('startTime' in rule && rule.startTime !== undefined) ||
+              ('startHour' in rule && rule.startHour !== undefined)) && (
+              <div className="mb-4 rounded-lg border border-indigo-100 bg-white/90 p-3 sm:p-4 grid gap-3 sm:grid-cols-2">
+                {'summary' in rule && rule.summary && (
+                  <div className="flex items-start gap-2 min-w-0">
+                    <svg
+                      className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-0.5">
+                        Schedule Summary
+                      </div>
+                      <div className="text-sm font-medium text-slate-900 break-words">{rule.summary}</div>
+                    </div>
+                  </div>
+                )}
+                {(('startTime' in rule && rule.startTime !== undefined) ||
+                  ('startHour' in rule && rule.startHour !== undefined)) && (
+                  <div className="flex items-start gap-2 min-w-0">
+                    <svg
+                      className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-0.5">
+                        Start Time
+                      </div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {formatStartTime(
+                          'startTime' in rule ? rule.startTime : undefined,
+                          'startHour' in rule ? rule.startHour : undefined,
+                          'startMinute' in rule ? rule.startMinute : undefined,
+                          'operator' in rule ? rule.operator : undefined
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           {/* Rachio Schedule Display */}
           {isRachioSchedule && rachioScheduleDisplay && (
             <div className="mb-4">
@@ -539,19 +602,6 @@ export function RuleView({
           {isRachioSchedule && isExpanded && (
             <div className="mt-4 pt-4 border-t border-indigo-200">
               <div className="space-y-4">
-                {/* Summary (if available - shows formatted schedule description) */}
-                {isRachioSchedule && 'summary' in rule && rule.summary && (
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Schedule Summary</div>
-                      <div className="text-sm font-medium text-slate-900">{rule.summary}</div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Watering Interval */}
                 {isRachioSchedule && (('interval' in rule && rule.interval !== undefined) || ('scheduleJobTypes' in rule && rule.scheduleJobTypes)) && (
                   <div className="flex items-start gap-3">
@@ -572,29 +622,6 @@ export function RuleView({
                       )}
                     </div>
                   </div>
-                )}
-
-                {/* Start Time */}
-                {isRachioSchedule && (
-                  (('startTime' in rule && rule.startTime !== undefined) || 
-                   ('startHour' in rule && rule.startHour !== undefined)) && (
-                    <div className="flex items-start gap-3">
-                      <svg className="w-5 h-5 text-indigo-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="flex-1">
-                        <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Start Time</div>
-                        <div className="text-sm font-medium text-slate-900">
-                          {formatStartTime(
-                            'startTime' in rule ? rule.startTime : undefined,
-                            'startHour' in rule ? rule.startHour : undefined,
-                            'startMinute' in rule ? rule.startMinute : undefined,
-                            'operator' in rule ? rule.operator : undefined
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
                 )}
 
                 {/* Date Range */}
